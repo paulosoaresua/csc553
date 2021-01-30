@@ -18,7 +18,9 @@
 
 extern int yylex();
 extern void yyerror();
- extern void printSyntaxTree(tnode *t, int n, int depth);
+extern void printSyntaxTree(tnode *t, int n, int depth);
+extern void generate_code(tnode *t);
+extern void print_code(tnode *t);
 
   /*
    * struct treenode *currfnbodyTree is set to point to
@@ -93,12 +95,18 @@ prog
        * for the body of the current function.  This can then
        * be traversed for code generation etc.
        */
-#ifdef DEBUG
-      printf("@@FUN: %s\n", $3);
-      printf("@@BODY:\n");
-      printSyntaxTree(currfnbodyTree, 4, 0);
-      printf("-----\n");
-#endif
+
+       generate_code(currfnbodyTree);
+       print_code(currfnbodyTree);
+
+/*
+ * #ifdef DEBUG
+ *       printf("@@FUN: %s\n", $3);
+ *       printf("@@BODY:\n");
+ *       printSyntaxTree(currfnbodyTree, 4, 0);
+ *       printf("-----\n");
+ * #endif
+*/
       CleanupFnInfo(); 
     }
   | /* epsilon */

@@ -14,7 +14,9 @@ set(CFILES
         print.c
         symbol-table.c
         syntax-tree.c
-        util.c)
+        util.c
+        instruction.c
+        code_generation.c)
 
 find_package(BISON 3.7.1)
 find_package(FLEX 2.5.4)

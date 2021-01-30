@@ -37,7 +37,7 @@ symtabnode *SymTabInsert(char *str, int sc);  // add ident to symbol table
 symtabnode *SymTabRecordFunInfo(bool isProto);
 void CleanupFnInfo(void);
 /*
- * Defugging functions
+ * Debugging functions
  */
 void printSTNode(symtabnode *stptr);
 void DumpSymTabLocal();

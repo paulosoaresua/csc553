@@ -3,12 +3,13 @@
 
 extern int yydebug;
 extern int yyparse();
+extern void println(int x);
 
 int status = 0;
 
 int main(void)
 {
-  freopen("../ExampleInputs/test05.c", "r", stdin);
+  freopen("../ExampleInputs/codegen.c", "r", stdin);
 
   SymTabInit(Global);
   SymTabInit(Local);
