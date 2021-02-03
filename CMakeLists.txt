@@ -16,7 +16,8 @@ set(CFILES
         syntax-tree.c
         util.c
         instruction.c
-        code_generation.c)
+        code_generation.c
+        code_translation.c)
 
 find_package(BISON 3.7.1)
 find_package(FLEX 2.5.4)

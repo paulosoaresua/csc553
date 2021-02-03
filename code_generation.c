@@ -2,40 +2,126 @@
 // Created by Paulo Soares on 1/29/21.
 //
 
-#include <stdio.h>
+#include "code_translation.h"
 #include "instruction.h"
 #include "protos.h"
 #include "syntax-tree.h"
+#include <stdio.h>
 
-void append_instructions(tnode *child, tnode *parent);
+#define L_VALUE 0
+#define R_VALUE 1
+
+void append_child_instructions(tnode *child, tnode *parent);
 void append_instruction(inode *instruction, tnode *node);
-void print_println_definition();
 
-void generate_code(tnode *node) {
+void process_function_header(symtabnode *func_header, tnode *body) {
+  // This syntax tree node is the first node after a function if defined.
+  // Therefore, we need to create an Enter instruction for it.
+  inode *instruction = create_instruction(OP_Enter, func_header, NULL, NULL);
+  body->code_head = instruction;
+  body->code_tail = instruction;
+}
+
+void process_allocations(symtabnode *function_ptr) {
+  function_ptr->byte_size = fill_local_allocations();
+}
+
+void generate_code(tnode *node, int lr_type) {
   inode *instruction;
+  symtabnode *tmp;
+
+  if (!node) {
+    // Nothing to be done if the node is NULL
+    return;
+  }
 
   switch (node->ntype) {
-  case Intcon: {
-    instruction = create_const_int_instruction(node->val.iconst);
+  case Assg:
+    generate_code(stAssg_Lhs(node), L_VALUE);
+    append_child_instructions(stAssg_Lhs(node), node);
+
+    generate_code(stAssg_Rhs(node), R_VALUE);
+    append_child_instructions(stAssg_Rhs(node), node);
+
+    instruction = create_instruction(OP_Assign, stAssg_Rhs(node)->place, NULL,
+                                     stAssg_Lhs(node)->place);
     append_instruction(instruction, node);
     break;
-  }
-  case FunCall: {
-    generate_code(stFunCall_Args(node));
-    append_instructions(stList_Head(stFunCall_Args(node)), node);
+
+  case Var:
+    // No code is needed for the variable. We just inform to the syntax tree
+    // node about its location in the symbol table.
+    node->place = stVar(node);
+    break;
+
+  case Intcon:
+    if (lr_type == L_VALUE) {
+      fprintf(stderr, "A constant integer cannot be used as an l-value.\n");
+    } else {
+      tmp = create_temporary(node->etype);
+      node->place = tmp;
+      instruction = create_const_int_instruction(node->val.iconst, tmp);
+      append_instruction(instruction, node);
+    }
+    break;
+
+  case Charcon:
+    if (lr_type == L_VALUE) {
+      fprintf(stderr, "Constant characters cannot be used as an l-value.\n");
+    } else {
+      tmp = create_temporary(node->etype);
+      node->place = tmp;
+      inode *instruction =
+          create_const_char_instruction(node->val.strconst, tmp);
+      append_instruction(instruction, node);
+    }
+    break;
+
+  case FunCall:
+    // Expand the parameters
+    generate_code(stFunCall_Args(node), lr_type);
+    append_child_instructions(stList_Head(stFunCall_Args(node)), node);
+
+    // Process the parameters
+    for (tnode *param = stFunCall_Args(node); param != NULL;
+         param = stList_Rest(param)) {
+      instruction =
+          create_instruction(OP_Param, stList_Head(param)->place, NULL, NULL);
+      append_instruction(instruction, node);
+    }
+
     symtabnode *function_ptr = stFunCall_Fun(node);
     instruction = create_instruction(OP_Call, function_ptr, NULL, NULL);
     append_instruction(instruction, node);
+
+    // TODO -  Second milestone
+    // if (function_ptr->ret_type != t_None) {
+    //   node->place = tmp;
+    //   instruction = create_instruction(OP_Retrieve, NULL, NULL,
+    //   function_ptr);
+    //   append_instruction(instruction, node);
+    // }
+
     break;
-  }
+
   case STnodeList: {
-    // Function arguments are processed here
     for (tnode *arg = node; arg != NULL; arg = stList_Rest(arg)) {
-      generate_code(stList_Head(arg));
-      append_instructions(stList_Head(arg), node);
+      generate_code(stList_Head(arg), lr_type);
+      append_child_instructions(stList_Head(arg), node);
     }
     break;
   }
+
+  case Return:
+    // TODO - second milestone
+    // tmp = create_temporary(stReturn(node)->etype);
+    // node->place = tmp;
+    instruction = create_instruction(OP_Return, NULL, NULL, NULL);
+    append_instruction(instruction, node);
+    break;
+
+  default:
+    break;
   }
 }
 
@@ -44,7 +130,11 @@ void generate_code(tnode *node) {
  * @param child: child node in the syntax tree
  * @param parent: parent of the child node in the syntax tree
  */
-void append_instructions(tnode *child, tnode *parent) {
+void append_child_instructions(tnode *child, tnode *parent) {
+  if (!child) {
+    return;
+  }
+
   if (!parent->code_head) {
     parent->code_head = child->code_head;
     parent->code_tail = child->code_tail;
@@ -61,7 +151,7 @@ void append_instructions(tnode *child, tnode *parent) {
  * @param node: node in the syntax tree
  */
 void append_instruction(inode *instruction, tnode *node) {
-  if (!node->code_head) {
+  if (!node->code_head || !node->code_tail) {
     node->code_head = instruction;
     node->code_tail = instruction;
   } else {
@@ -70,89 +160,4 @@ void append_instruction(inode *instruction, tnode *node) {
   }
 }
 
-void print_code(tnode *root) {
-  printf("main: j _main \n");
-  printf("_main: j _main \n");
-  print_println_definition();
-
-  inode *curr_instruction = root->code_head;
-  while (curr_instruction) {
-    switch (curr_instruction->op_type) {
-    case OP_Const_Int: {
-      printf("# const int    \n");
-      printf("  li $3, %d      \n", curr_instruction->val.const_int);
-      printf("  la $sp -4($sp) \n");
-      printf("  sw $3 0($sp)   \n");
-      break;
-    }
-//    case OP_Enter: {
-//      int n = 0; // curr_instruction->src1->... get size in bytes
-//      printf("la $sp, -8($sp) # allocate space for old $fp and $ra");
-//      printf("sw $fp, 4($sp)  # save old $fp");
-//      printf("sw $ra, 0($sp)  # save return address");
-//      printf("la $fp, 0($sp)  # set up frame pointer");
-//      printf("la $sp, −%d($sp) # allocate stack frame", n);
-//      break;
-//    }
-    case OP_Call: {
-      char* func_name = curr_instruction->val.op_members.src1->name;
-      printf("  jal _%s # Jump to function \n", func_name);
-      printf("  la $sp %d($sp) # Pop the actual from the stack \n", 4);
-      break;
-    }
-    }
-    curr_instruction = curr_instruction->next;
-  }
-}
-
-void print_println_definition() {
-  printf("# func println        \n");
-  printf("  .align 2            \n");
-  printf("  .data               \n");
-  printf("  nl: .asciiz \"\\n\" \n");
-  printf("  .align 2            \n");
-  printf("  .text               \n");
-  printf("  _println:           \n");
-  printf("    li $v0, 1         \n");
-  printf("    lw $a0, 0($sp)    \n");
-  printf("    syscall           \n");
-  printf("    li $v0, 4         \n");
-  printf("    la $a0, nl        \n");
-  printf("    syscall           \n");
-  printf("    jr $ra            \n");
-}
-
-void generate_statement_code(tnode *statement_node) {
-  switch (statement_node->ntype) {
-  case For:
-    break;
-  case While:
-    break;
-  case If:
-    break;
-  case Equals:
-    break;
-    //...
-  }
-}
-
-void generate_expression_code(tnode *expression_node) {
-  switch (expression_node->ntype) {
-  case Plus:
-    break;
-  case Mult:
-    break;
-  case BinaryMinus:
-    break;
-  case Div:
-    break;
-    //...
-  }
-}
-
-symtabnode *create_temporary(int type, int scope) {
-  symtabnode *st_node = SymTabInsert("_tmp", scope);
-  st_node->type = type;
-
-  return st_node;
-}
+void print_code(tnode *root) { to_mips(root); }

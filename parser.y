@@ -19,7 +19,9 @@
 extern int yylex();
 extern void yyerror();
 extern void printSyntaxTree(tnode *t, int n, int depth);
-extern void generate_code(tnode *t);
+extern void process_function_header(symtabnode *func_header, tnode *body);
+extern void generate_code(tnode *t, int lr_type);
+extern void process_allocations();
 extern void print_code(tnode *t);
 
   /*
@@ -96,7 +98,9 @@ prog
        * be traversed for code generation etc.
        */
 
-       generate_code(currfnbodyTree);
+	   process_function_header(currFun, currfnbodyTree);
+       generate_code(currfnbodyTree, 1);
+       process_allocations(currFun);
        print_code(currfnbodyTree);
 
 /*

@@ -1,2 +1,7 @@
 extern void println(int x);
-void test(void) { println(45); }
+
+void main(int y) {
+  int x;
+  x = 123;
+  println(x);
+}

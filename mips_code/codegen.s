@@ -1,5 +1,6 @@
-main: j _main
-# func println
+# --------------------------
+# FUNCTION println
+# --------------------------
 .align 2
 .data
 nl: .asciiz "\n"
@@ -13,24 +14,42 @@ _println:
   la $a0, nl
   syscall
   jr $ra
-# const int
+
+# --------------------------
+# FUNCTION main
+# --------------------------
+main: j _main
+
+# --------------------------
+# FUNCTION main
+# --------------------------
 _main:
-	# enter main
-	la $sp, -8($sp) # allocate space for old $fp and $ra
-    sw $fp, 4($sp)  # save old $fp
-    sw $ra, 0($sp)  # save return address
-    la $fp, 0($sp)  # set up frame pointer
-    la $sp, 0($sp) # allocate stack frame: n = space for locals/temps, in bytes
+  la $sp, -8($sp)
+  sw $fp, 4($sp)
+  sw $ra, 0($sp)
+  la $fp, 0($sp)
+  la $sp, -8($sp)
 
-	li $3, 45
-	la $sp -4($sp)
-	sw $3 0($sp)
-	jal _println  # Jump to function
-	la $sp 4($sp) # Pop the actual from the stack
+  # OP_Assign_Int
+  li $t0, 123
+  sw $t0, -8($fp)
 
-	# leave main
-	la $sp, 0($fp) # deallocate locals
-    lw $ra, 0($sp) # restore return address
-    lw $fp, 4($sp) # restore frame pointer
-    la $sp, 8($sp) # restore stack pointer
-    jr $ra
+  # OP_Assign
+  lw $t0, -8($fp)
+  sw $t0, -4($fp)
+
+  # OP_Param
+  lw $t0, -4($fp)
+  la $sp, -4($sp)
+  sw $t0, 0($sp)
+
+  # OP_Call
+  jal _println
+  la $sp, 4($sp)
+
+  # OP_Return
+  la $sp, 0($fp)
+  lw $ra, 0($sp)
+  lw $fp, 4($sp)
+  la $sp, 8($sp)
+  jr $ra

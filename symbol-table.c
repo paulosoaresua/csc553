@@ -4,6 +4,7 @@
  * Author: Saumya Debray
  */
 
+
 #include <assert.h>
 #include "global.h"
 #include "symbol-table.h"
@@ -18,11 +19,10 @@ extern symtabnode *currFun;
 
 static symtabnode *SymTab[2][HASHTBLSZ];
 
-static int hash(char *str)
-{
+static int hash(char *str) {
   int n = 0;
 
-  for ( ; str != NULL && *str != '\0'; str++) {
+  for (; str != NULL && *str != '\0'; str++) {
     n += *str;
   }
 
@@ -35,8 +35,7 @@ static int hash(char *str)
  * Given a scope sc, initialize the symbol table for that scope by setting
  * all the hash table buckets to NULL.
  */
-void SymTabInit(int sc)
-{
+void SymTabInit(int sc) {
   int i;
 
   for (i = 0; i < HASHTBLSZ; i++) {
@@ -51,8 +50,7 @@ void SymTabInit(int sc)
  * return a pointer to the corresponding symbol table node, otherwise
  * return NULL.
  */
-symtabnode *SymTabLookup(char *str, int sc)
-{
+symtabnode *SymTabLookup(char *str, int sc) {
   int hval;
   symtabnode *stptr;
 
@@ -77,8 +75,7 @@ symtabnode *SymTabLookup(char *str, int sc)
  * If found in either table, return a pointer to the corresponding
  * symbol table node, otherwise return NULL.
  */
-symtabnode *SymTabLookupAll(char *str)
-{
+symtabnode *SymTabLookupAll(char *str) {
   symtabnode *stptr;
 
   assert(str);
@@ -99,27 +96,27 @@ symtabnode *SymTabLookupAll(char *str)
  * pointer to the resulting entry.  This code assumes that str does not
  * already occur in that symbol table; it gives an error message if it does.
  */
-symtabnode *SymTabInsert(char *str, int sc)
-{
+symtabnode *SymTabInsert(char *str, int sc) {
   int hval;
   symtabnode *sptr;
-  
+
   assert(str != 0);
 
   sptr = SymTabLookup(str, sc);
   CASSERT(sptr == NULL, ("multiple declarations of %s", str));
 
-  if (sptr != NULL) return sptr;
+  if (sptr != NULL)
+    return sptr;
 
   hval = hash(str);
-  
-  sptr = (symtabnode *) zalloc(sizeof(symtabnode));
+
+  sptr = (symtabnode *)zalloc(sizeof(symtabnode));
   sptr->name = str;
   sptr->scope = sc;
-  
+
   sptr->next = SymTab[sc][hval];
   SymTab[sc][hval] = sptr;
-  
+
   return sptr;
 }
 
@@ -132,8 +129,7 @@ symtabnode *SymTabInsert(char *str, int sc)
  * parameters).  It returns a pointer to the symbol table record of
  * the function.
  */
-symtabnode *SymTabRecordFunInfo(bool isProto) 
-{
+symtabnode *SymTabRecordFunInfo(bool isProto) {
   symtabnode *stptr, *func;
   llistptr ltmp;
   symtabnode *formal_list_hd, *formal_list_tl, *formal;
@@ -147,7 +143,7 @@ symtabnode *SymTabRecordFunInfo(bool isProto)
    */
   if (func != NULL) {
     if (func->fn_proto_state == FN_PROTO && !isProto) {
-      /* 
+      /*
        * the previous definition was a prototype, and this is the
        * real definition.  Check and make sure that the type info
        * in the prototype matches that for the definition.
@@ -156,37 +152,38 @@ symtabnode *SymTabRecordFunInfo(bool isProto)
       ltmp = lptr;
       n = 1;
       while (formal != NULL && ltmp != NULL) {
-	if ((formal->elt_type == t_None 
-	     && !ltmp->is_array 
-	     && formal->type != ltmp->type)  // neither is an array
-	    || (formal->elt_type != t_None && !ltmp->is_array) // formal is array, but not ltmp
-	    || (formal->elt_type == t_None && ltmp->is_array)  // ltmp is array, but not formal
-	    || (formal->elt_type != t_None
-		&& ltmp->is_array
-		&& formal->elt_type != ltmp->type /* both are arrays */)) {
-	  errmsg("function %s: type of argument %d does not match that of prototype",
-		 fnName, n);
-	}
-	n++;
-	formal = formal->next;
-	ltmp = ltmp->next;
+        if ((formal->elt_type == t_None && !ltmp->is_array &&
+             formal->type != ltmp->type) // neither is an array
+            || (formal->elt_type != t_None &&
+                !ltmp->is_array) // formal is array, but not ltmp
+            || (formal->elt_type == t_None &&
+                ltmp->is_array) // ltmp is array, but not formal
+            || (formal->elt_type != t_None && ltmp->is_array &&
+                formal->elt_type != ltmp->type /* both are arrays */)) {
+          errmsg("function %s: type of argument %d does not match that of "
+                 "prototype",
+                 fnName, n);
+        }
+        n++;
+        formal = formal->next;
+        ltmp = ltmp->next;
       }
       if (!(formal == NULL && ltmp == NULL)) {
-	errmsg("function %s: no of arguments in definition does not match prototype",
-	       fnName);
+        errmsg("function %s: no of arguments in definition does not match "
+               "prototype",
+               fnName);
       }
       if (fnRetType != func->ret_type) {
-	errmsg("function %s: return type does not match that of prototype", fnName);
+        errmsg("function %s: return type does not match that of prototype",
+               fnName);
       }
       if (func->is_extern) {
-	errmsg("function %s was previously defined as EXTERN", fnName);
+        errmsg("function %s was previously defined as EXTERN", fnName);
       }
-    }
-    else {
+    } else {
       errmsg("Multiple prototypes/definitions for function %s", fnName);
     }
-  }
-  else {
+  } else {
     func = SymTabInsert(fnName, Global);
   }
 
@@ -198,35 +195,32 @@ symtabnode *SymTabRecordFunInfo(bool isProto)
   for (ltmp = lptr; ltmp != NULL; ltmp = ltmp->next) {
     if (CurrType == t_None) {
       errmsg("Illegal type [void] for identifier %s", lptr->name);
-    }
-    else {
+    } else {
       stptr = SymTabInsert(ltmp->name, CurrScope);
       stptr->formal = true;
       if (ltmp->is_array) {
-	stptr->type = t_Array;
-	stptr->elt_type = ltmp->type;
-      }
-      else {
-	stptr->type = ltmp->type;
-	stptr->elt_type = t_None;
+        stptr->type = t_Array;
+        stptr->elt_type = ltmp->type;
+      } else {
+        stptr->type = ltmp->type;
+        stptr->elt_type = t_None;
       }
       /*
        * Now create a record for the list of formals, and copy over
        * info from stptr.
        */
       formal = zalloc(sizeof(*formal));
-      formal->name =     stptr->name;
-      formal->scope =    stptr->scope;
-      formal->formal =   stptr->formal;
-      formal->type =     stptr->type;
+      formal->name = stptr->name;
+      formal->scope = stptr->scope;
+      formal->formal = stptr->formal;
+      formal->type = stptr->type;
       formal->elt_type = stptr->elt_type;
 
       if (formal_list_hd == NULL) {
-	formal_list_hd = formal_list_tl = formal;
-      }
-      else {
-	formal_list_tl->next = formal;
-	formal_list_tl = formal;
+        formal_list_hd = formal_list_tl = formal;
+      } else {
+        formal_list_tl->next = formal;
+        formal_list_tl = formal;
       }
     }
   } /* for */
@@ -235,33 +229,77 @@ symtabnode *SymTabRecordFunInfo(bool isProto)
 
   if (isProto && func->fn_proto_state != FN_DEFINED) {
     func->fn_proto_state = FN_PROTO;
-  }
-  else {
+  } else {
     func->fn_proto_state = FN_DEFINED;
   }
 
   func->is_extern = is_extern;
   fnName = NULL;
 
+  // Compute the number of formal parameters of the function
+  func->num_formals = 0;
+  symtabnode* formal_param = func->formals;
+  while(formal_param) {
+    func->num_formals += 1;
+    formal_param = formal_param->next;
+  }
+
   return func;
 }
-
 
 /*
  * CleanupFnInfo() -- clean up after processing information
  * for a function prototype/definition.
  */
-void CleanupFnInfo(void)
-{
+void CleanupFnInfo(void) {
   fnName = NULL;
   lptr = NULL;
   currFun = NULL;
   is_extern = false;
   CurrScope = Global;
 #if 0
-  DumpSymTab(); 
+  DumpSymTab();
 #endif
   SymTabInit(Local);
+}
+
+/*********************************************************************
+ *                                                                   *
+ *                           for codegen                             *
+ *                                                                   *
+ *********************************************************************/
+
+symtabnode *create_temporary(int type) {
+  char name[16];
+  sprintf(name, "_tmp%d", tmp_counter++);
+  symtabnode *st_node = SymTabInsert(name, Local);
+  st_node->type = type;
+  return st_node;
+}
+
+int fill_local_allocations() {
+  int locals_byte_size = 0;
+
+  for(int i = 0; i < HASHTBLSZ; i++) {
+    symtabnode* node = SymTab[Local][i];
+    if (node && !node->formal) {
+      int size = 0;
+      switch(node->type) {
+      case t_Int:
+        size = 4;
+        break;
+      case t_Char:
+        size = 1;
+        break;
+      }
+
+      locals_byte_size += size;
+      node->byte_size = size;
+      node->fp_offset = locals_byte_size;
+    }
+  }
+
+  return locals_byte_size;
 }
 
 /*********************************************************************
@@ -270,64 +308,73 @@ void CleanupFnInfo(void)
  *                                                                   *
  *********************************************************************/
 
-void printType(symtabnode *stptr)
-{
+void printType(symtabnode *stptr) {
   symtabnode *formals;
   switch (stptr->type) {
   case t_Char:
     printf("C");
     CASSERT(stptr->elt_type == t_None, ("<?!>"));
     break;
-  case t_Int:  printf("I");
+  case t_Int:
+    printf("I");
     CASSERT(stptr->elt_type == t_None, ("<?!>"));
     break;
   case t_Array:
-    switch(stptr->elt_type) {
-    case t_Char: printf("C[%d]", stptr->num_elts); break;
-    case t_Int: printf("I[%d]", stptr->num_elts); break;
-    default: printf("%d?[%d]", stptr->elt_type, stptr->num_elts);
+    switch (stptr->elt_type) {
+    case t_Char:
+      printf("C[%d]", stptr->num_elts);
+      break;
+    case t_Int:
+      printf("I[%d]", stptr->num_elts);
+      break;
+    default:
+      printf("%d?[%d]", stptr->elt_type, stptr->num_elts);
     }
     break;
   case t_Func:
     printf("(");
     if (stptr->formals == NULL) {
       printf("void");
-    }
-    else {
+    } else {
       for (formals = stptr->formals; formals; formals = formals->next) {
-	printType(formals);
-	if (formals->next) {
-	  printf(", ");
-	}
+        printType(formals);
+        if (formals->next) {
+          printf(", ");
+        }
       }
     }
     printf(") -> ");
     switch (stptr->ret_type) {
-    case t_Char: printf("C"); break;
-    case t_Int: printf("I"); break;
-    case t_None: printf("void"); break;
-    default: printf("??%d", stptr->ret_type);
+    case t_Char:
+      printf("C");
+      break;
+    case t_Int:
+      printf("I");
+      break;
+    case t_None:
+      printf("void");
+      break;
+    default:
+      printf("??%d", stptr->ret_type);
     }
     break;
   case t_None:
     printf("-");
     break;
-  default: printf("?!?%d", stptr->type);
+  default:
+    printf("?!?%d", stptr->type);
   }
 }
 
-void printSTNode(symtabnode *stptr)
-{
-  printf(">> %s: scope = %c%s; type: ",
-	 stptr->name,
-	 (stptr->scope == Global ? 'G' : 'L'),
-	 (stptr->formal == true ? "<formal param>" : ""));
+void printSTNode(symtabnode *stptr) {
+  printf(">> %s: scope = %c%s; type: ", stptr->name,
+         (stptr->scope == Global ? 'G' : 'L'),
+         (stptr->formal == true ? "<formal param>" : ""));
   printType(stptr);
   printf("\n");
 }
 
-void DumpSymTabLocal()
-{
+void DumpSymTabLocal() {
   int i;
   symtabnode *stptr;
 
@@ -340,11 +387,9 @@ void DumpSymTabLocal()
   }
 
   printf("------------------------------------------------------------\n");
-
 }
 
-void DumpSymTabGlobal()
-{
+void DumpSymTabGlobal() {
   int i;
   symtabnode *stptr;
 
@@ -357,11 +402,9 @@ void DumpSymTabGlobal()
   }
 
   printf("------------------------------------------------------------\n");
-
 }
 
-void DumpSymTab()
-{
+void DumpSymTab() {
   DumpSymTabGlobal();
   DumpSymTabLocal();
 }
