@@ -102,10 +102,9 @@ void print_function(tnode *node) {
 
       // Destiny
       if (DEST(curr_instruction)->scope == Global) {
-        printf("  s%c $t0, %s \n", word_or_byte, DEST(curr_instruction)->name);
+        printf("  sw $t0, %s \n", DEST(curr_instruction)->name);
       } else {
-        printf("  s%c $t0, %d($fp) \n", word_or_byte,
-               DEST(curr_instruction)->fp_offset);
+        printf("  sw $t0, %d($fp) \n", DEST(curr_instruction)->fp_offset);
       }
 
       break;
@@ -113,6 +112,7 @@ void print_function(tnode *node) {
     case OP_Param: {
       printf("\n");
       printf("  # OP_Param       \n");
+
       char word_or_byte = get_word_or_byte(SRC1(curr_instruction)->type);
       if (SRC1(curr_instruction)->scope == Global) {
         printf("  l%c $t0, %s \n", word_or_byte, SRC1(curr_instruction)->name);
@@ -121,7 +121,7 @@ void print_function(tnode *node) {
         ->fp_offset);
       }
       printf("  la $sp, -4($sp)  \n");
-      printf("  s%c $t0, 0($sp)   \n", word_or_byte);
+      printf("  sw $t0, 0($sp)   \n");
       break;
     }
 
