@@ -82,3 +82,12 @@ void save_string_instruction(inode* instruction) {
 inode* get_string_instruction_head() {
   return string_instructions_head;
 }
+
+inode *create_global_decl_instruction(char* id_name, int type) {
+  inode* instruction = zalloc(sizeof(*instruction));
+  instruction->op_type = OP_Global;
+  instruction->label = id_name;
+  instruction->val.type = type;
+
+  return instruction;
+}

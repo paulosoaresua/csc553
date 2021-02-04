@@ -10,13 +10,13 @@ int status = 0;
 
 int main(void)
 {
-//  freopen("../../ExampleInputs/codegen.c", "r", stdin);
-//  freopen("../../mips_code/codegen.s", "w", stdout);
+//  freopen("../../ExampleInputs/codegen2.c", "r", stdin);
+//  freopen("../../mips_code/codegen2.s", "w", stdout);
 
   SymTabInit(Global);
   SymTabInit(Local);
 
-  print_globals();
+  print_pre_defined_instructions();
   if (yyparse() < 0) {
     printf("main: syntax error\n");
     status = 1;

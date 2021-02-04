@@ -20,9 +20,10 @@ extern int yylex();
 extern void yyerror();
 extern void printSyntaxTree(tnode *t, int n, int depth);
 extern void process_function_header(symtabnode *func_header, tnode *body);
-extern void generate_code(tnode *t, int lr_type);
+extern void generate_function_code(tnode *t, int lr_type);
 extern void process_allocations();
 extern void print_function(tnode *t);
+extern void collect_global(char* id_name, int type, int scope);
 
   /*
    * struct treenode *currfnbodyTree is set to point to
@@ -100,7 +101,7 @@ prog
 
 	   /* Code generation */
 	   process_function_header(currFun, currfnbodyTree);
-       generate_code(currfnbodyTree, 1);
+       generate_function_code(currfnbodyTree, 1);
        process_allocations(currFun);
        print_function(currfnbodyTree);
 
@@ -183,6 +184,7 @@ id_decl
       stptr->type = CurrType;
       stptr->formal = stptr->is_extern = false;
       stptr->elt_type = t_None;
+      collect_global(id_name, CurrType, CurrScope);
     }
   }
 | Ident '[' ArraySize ']' { 

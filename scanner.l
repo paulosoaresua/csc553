@@ -34,8 +34,8 @@ whitesp	    [[:space:]]
 				linenum);
 			 exit(-1);
 			}
-{whitesp}*		;
 \n			linenum++;
+{whitesp}*		;
 {letter}{alfa}*		return(id_or_keywd(yytext));
 {digit}+		{ ival = atoi(yytext); return(INTCON);}
 "'"."'"                	{ ival = yytext[1]; return(CHARCON); }

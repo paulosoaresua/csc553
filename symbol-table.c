@@ -313,6 +313,14 @@ int fill_local_allocations() {
   return locals_byte_size;
 }
 
+symtabnode** get_symbol_table_entries(int scope) {
+  return SymTab[scope];
+}
+
+int get_symbol_table_size() {
+  return HASHTBLSZ;
+}
+
 /*********************************************************************
  *                                                                   *
  *                           for debugging                           *

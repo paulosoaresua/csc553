@@ -11,23 +11,30 @@
 #define L_VALUE 0
 #define R_VALUE 1
 
+inode* global_head = NULL;
+inode* global_tail = NULL;
+
 static void append_child_instructions(tnode *child, tnode *parent);
 static void append_instruction(inode *instruction, tnode *node);
 static void append_instructions(inode *instructions, tnode *node);
 
 void process_function_header(symtabnode *func_header, tnode *body) {
+  append_instructions(global_head, body);
   // This syntax tree node is the first node after a function if defined.
   // Therefore, we need to create an Enter instruction for it.
   inode *instruction = create_instruction(OP_Enter, func_header, NULL, NULL);
-  body->code_head = instruction;
-  body->code_tail = instruction;
+  append_instruction(instruction, body);
+
+  // Clear globals
+  global_head = NULL;
+  global_tail = NULL;
 }
 
 void process_allocations(symtabnode *function_ptr) {
   function_ptr->byte_size = fill_local_allocations();
 }
 
-void generate_code(tnode *node, int lr_type) {
+void generate_function_code(tnode *node, int lr_type) {
   inode *instruction;
   symtabnode *tmp;
 
@@ -38,10 +45,10 @@ void generate_code(tnode *node, int lr_type) {
 
   switch (node->ntype) {
   case Assg:
-    generate_code(stAssg_Lhs(node), L_VALUE);
+    generate_function_code(stAssg_Lhs(node), L_VALUE);
     append_child_instructions(stAssg_Lhs(node), node);
 
-    generate_code(stAssg_Rhs(node), R_VALUE);
+    generate_function_code(stAssg_Rhs(node), R_VALUE);
     append_child_instructions(stAssg_Rhs(node), node);
 
     instruction = create_instruction(OP_Assign, stAssg_Rhs(node)->place, NULL,
@@ -94,7 +101,7 @@ void generate_code(tnode *node, int lr_type) {
 
   case FunCall: {
     // Expand the parameters
-    generate_code(stFunCall_Args(node), lr_type);
+    generate_function_code(stFunCall_Args(node), lr_type);
     append_child_instructions(stFunCall_Args(node), node);
 
     // Create PARAM instructions
@@ -126,7 +133,7 @@ void generate_code(tnode *node, int lr_type) {
 
   case STnodeList: {
     for (tnode *arg = node; arg != NULL; arg = stList_Rest(arg)) {
-      generate_code(stList_Head(arg), lr_type);
+      generate_function_code(stList_Head(arg), lr_type);
       append_child_instructions(stList_Head(arg), node);
     }
     break;
@@ -142,6 +149,19 @@ void generate_code(tnode *node, int lr_type) {
 
   default:
     break;
+  }
+}
+
+void collect_global(char* id_name, int type, int scope) {
+  if(scope == Global) {
+    inode* instruction = create_global_decl_instruction(id_name, type);
+    if(!global_head) {
+      global_head = instruction;
+      global_tail = global_head;
+    } else {
+      global_tail->next = instruction;
+      global_tail = global_tail->next;
+    }
   }
 }
 

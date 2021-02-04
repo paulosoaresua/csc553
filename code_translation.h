@@ -11,9 +11,9 @@
 #include "syntax-tree.h"
 
 /**
- * Prints code for global variables and pre-defined functions.
+ * Prints code for pre-defined functions.
  */
-void print_globals();
+void print_pre_defined_instructions();
 
 /**
  * Converts and prints on the terminal a series of 3-address instructions to
@@ -22,17 +22,8 @@ void print_globals();
 void print_function(tnode* node);
 
 /**
- * Prints MIPS assembly code for the predefined function println.
+ * Prints string declarations.
  */
-void print_println();
-
-/**
- * Prints a comment with the function name before the function definition.
- *
- * @param function_name: name of the function
- */
-void print_function_header(char* function_name);
-
 void print_strings();
 
 #endif // CSC553_CODE_TRANSLATION_H

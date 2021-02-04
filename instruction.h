@@ -19,7 +19,8 @@ typedef enum OperationType {
   OP_Retrieve,
   OP_Enter,
   OP_Return,
-  OP_String
+  OP_String,
+  OP_Global
 } OperationType;
 
 typedef struct instr_node {
@@ -34,6 +35,7 @@ typedef struct instr_node {
     } op_members;
     int const_int;
     char* const_char;
+    int type;
   } val;
 
   struct instr_node *next;
@@ -113,6 +115,16 @@ void save_string_instruction(inode* instruction);
  * @return pointer to string instruction head
  */
 inode* get_string_instruction_head();
+
+/**
+ * Creates an instruction for declaration of a global variable.
+ *
+ * @param id_name: name of the variable
+ * @param type: type of the variable
+ *
+ * @return new instruction
+ */
+inode *create_global_decl_instruction(char* id_name, int type);
 
 
 #define SRC1(x) (x)->val.op_members.src1

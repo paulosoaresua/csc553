@@ -79,4 +79,11 @@ symtabnode *create_temporary(int type);
  */
 int fill_local_allocations();
 
+/**
+ * Returns the symbol table entries for global variables.
+ *
+ * @return symbol table entries
+ */
+symtabnode** get_globals();
+
 #endif /* _SYMBOL_TABLE_H_ */
