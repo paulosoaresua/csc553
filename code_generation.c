@@ -1,8 +1,8 @@
-//
-// Created by Paulo Soares on 1/29/21.
-//
+/*
+ * Author: Paulo Soares
+ * CSC 553 (Spring 2021)
+ */
 
-#include "code_translation.h"
 #include "instruction.h"
 #include "protos.h"
 #include "syntax-tree.h"
@@ -11,8 +11,9 @@
 #define L_VALUE 0
 #define R_VALUE 1
 
-void append_child_instructions(tnode *child, tnode *parent);
-void append_instruction(inode *instruction, tnode *node);
+static void append_child_instructions(tnode *child, tnode *parent);
+static void append_instruction(inode *instruction, tnode *node);
+static void append_instructions(inode *instructions, tnode *node);
 
 void process_function_header(symtabnode *func_header, tnode *body) {
   // This syntax tree node is the first node after a function if defined.
@@ -57,6 +58,7 @@ void generate_code(tnode *node, int lr_type) {
   case Intcon:
     if (lr_type == L_VALUE) {
       fprintf(stderr, "A constant integer cannot be used as an l-value.\n");
+      return;
     } else {
       tmp = create_temporary(node->etype);
       node->place = tmp;
@@ -67,28 +69,45 @@ void generate_code(tnode *node, int lr_type) {
 
   case Charcon:
     if (lr_type == L_VALUE) {
-      fprintf(stderr, "Constant characters cannot be used as an l-value.\n");
+      fprintf(stderr, "A constant char cannot be used as an l-value.\n");
+      return;
     } else {
       tmp = create_temporary(node->etype);
       node->place = tmp;
-      inode *instruction =
-          create_const_char_instruction(node->val.strconst, tmp);
+      instruction = create_const_char_instruction(node->val.iconst, tmp);
       append_instruction(instruction, node);
     }
     break;
 
-  case FunCall:
+  case Stringcon:
+    // TODO - milestone 2
+//    if (lr_type == L_VALUE) {
+//      fprintf(stderr, "Constant characters cannot be used as an l-value.\n");
+//    } else {
+//      // Create a global label for the string
+//      instruction = create_string_instruction(node->val.strconst);
+//      // Save the label to be referenced later
+//      instruction = create_const_char_instruction(instruction->label);
+//      append_instruction(instruction, node);
+//    }
+    break;
+
+  case FunCall: {
     // Expand the parameters
     generate_code(stFunCall_Args(node), lr_type);
-    append_child_instructions(stList_Head(stFunCall_Args(node)), node);
+    append_child_instructions(stFunCall_Args(node), node);
 
-    // Process the parameters
+    // Create PARAM instructions
+    inode* params_instructions = NULL;
     for (tnode *param = stFunCall_Args(node); param != NULL;
          param = stList_Rest(param)) {
       instruction =
           create_instruction(OP_Param, stList_Head(param)->place, NULL, NULL);
-      append_instruction(instruction, node);
+      // Actuals from the right to the left
+      instruction->next = params_instructions;
+      params_instructions = instruction;
     }
+    append_instructions(params_instructions, node);
 
     symtabnode *function_ptr = stFunCall_Fun(node);
     instruction = create_instruction(OP_Call, function_ptr, NULL, NULL);
@@ -103,6 +122,7 @@ void generate_code(tnode *node, int lr_type) {
     // }
 
     break;
+  }
 
   case STnodeList: {
     for (tnode *arg = node; arg != NULL; arg = stList_Rest(arg)) {
@@ -130,8 +150,8 @@ void generate_code(tnode *node, int lr_type) {
  * @param child: child node in the syntax tree
  * @param parent: parent of the child node in the syntax tree
  */
-void append_child_instructions(tnode *child, tnode *parent) {
-  if (!child) {
+static void append_child_instructions(tnode *child, tnode *parent) {
+  if (!child || !child->code_head) {
     return;
   }
 
@@ -145,12 +165,12 @@ void append_child_instructions(tnode *child, tnode *parent) {
 }
 
 /**
- * Append a instruction to a node's list of instructions.
+ * Append an instruction to a node's list of instructions.
  *
  * @param instruction: instruction
  * @param node: node in the syntax tree
  */
-void append_instruction(inode *instruction, tnode *node) {
+static void append_instruction(inode *instruction, tnode *node) {
   if (!node->code_head || !node->code_tail) {
     node->code_head = instruction;
     node->code_tail = instruction;
@@ -160,4 +180,16 @@ void append_instruction(inode *instruction, tnode *node) {
   }
 }
 
-void print_code(tnode *root) { to_mips(root); }
+/**
+ * Append instructions to a node's list of instructions.
+ *
+ * @param instruction: instruction
+ * @param node: node in the syntax tree
+ */
+static void append_instructions(inode *instructions, tnode *node) {
+  inode *instruction = instructions;
+  while(instruction) {
+    append_instruction(instruction, node);
+    instruction = instruction->next;
+  }
+}

@@ -22,7 +22,7 @@ extern void printSyntaxTree(tnode *t, int n, int depth);
 extern void process_function_header(symtabnode *func_header, tnode *body);
 extern void generate_code(tnode *t, int lr_type);
 extern void process_allocations();
-extern void print_code(tnode *t);
+extern void print_function(tnode *t);
 
   /*
    * struct treenode *currfnbodyTree is set to point to
@@ -98,19 +98,12 @@ prog
        * be traversed for code generation etc.
        */
 
+	   /* Code generation */
 	   process_function_header(currFun, currfnbodyTree);
        generate_code(currfnbodyTree, 1);
        process_allocations(currFun);
-       print_code(currfnbodyTree);
+       print_function(currfnbodyTree);
 
-/*
- * #ifdef DEBUG
- *       printf("@@FUN: %s\n", $3);
- *       printf("@@BODY:\n");
- *       printSyntaxTree(currfnbodyTree, 4, 0);
- *       printf("-----\n");
- * #endif
-*/
       CleanupFnInfo(); 
     }
   | /* epsilon */

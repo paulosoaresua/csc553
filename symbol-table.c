@@ -4,10 +4,10 @@
  * Author: Saumya Debray
  */
 
-
-#include <assert.h>
 #include "global.h"
+
 #include "symbol-table.h"
+#include <assert.h>
 
 extern int CurrScope, CurrType, fnRetType;
 extern char *fnName;
@@ -27,6 +27,21 @@ static int hash(char *str) {
   }
 
   return n % HASHTBLSZ;
+}
+
+static int get_byte_size(int type) {
+  int size = 0;
+
+  switch (type) {
+  case t_Int:
+    size = 4;
+    break;
+  case t_Char:
+    size = 4;
+    break;
+  }
+
+  return size;
 }
 
 /*
@@ -111,7 +126,10 @@ symtabnode *SymTabInsert(char *str, int sc) {
   hval = hash(str);
 
   sptr = (symtabnode *)zalloc(sizeof(symtabnode));
-  sptr->name = str;
+  // Needed to copy the string to avoid having corrupted memory addresses for
+  // the name of variables created by the compiler
+  sptr->name = malloc(strlen(str) * sizeof(char));
+  sptr->name = strcpy(sptr->name, str);
   sptr->scope = sc;
 
   sptr->next = SymTab[sc][hval];
@@ -192,6 +210,7 @@ symtabnode *SymTabRecordFunInfo(bool isProto) {
 
   formal_list_hd = formal_list_tl = NULL;
 
+  int i = 0;
   for (ltmp = lptr; ltmp != NULL; ltmp = ltmp->next) {
     if (CurrType == t_None) {
       errmsg("Illegal type [void] for identifier %s", lptr->name);
@@ -204,6 +223,7 @@ symtabnode *SymTabRecordFunInfo(bool isProto) {
       } else {
         stptr->type = ltmp->type;
         stptr->elt_type = t_None;
+        stptr->fp_offset = 4 * (++i + 1);
       }
       /*
        * Now create a record for the list of formals, and copy over
@@ -238,8 +258,8 @@ symtabnode *SymTabRecordFunInfo(bool isProto) {
 
   // Compute the number of formal parameters of the function
   func->num_formals = 0;
-  symtabnode* formal_param = func->formals;
-  while(formal_param) {
+  symtabnode *formal_param = func->formals;
+  while (formal_param) {
     func->num_formals += 1;
     formal_param = formal_param->next;
   }
@@ -280,22 +300,13 @@ symtabnode *create_temporary(int type) {
 int fill_local_allocations() {
   int locals_byte_size = 0;
 
-  for(int i = 0; i < HASHTBLSZ; i++) {
-    symtabnode* node = SymTab[Local][i];
+  for (int i = 0; i < HASHTBLSZ; i++) {
+    symtabnode *node = SymTab[Local][i];
     if (node && !node->formal) {
-      int size = 0;
-      switch(node->type) {
-      case t_Int:
-        size = 4;
-        break;
-      case t_Char:
-        size = 1;
-        break;
-      }
-
+      int size = get_byte_size(node->type);
       locals_byte_size += size;
+      node->fp_offset = -locals_byte_size;
       node->byte_size = size;
-      node->fp_offset = locals_byte_size;
     }
   }
 

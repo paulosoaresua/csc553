@@ -375,6 +375,8 @@ tnode *mkConstNode(SyntaxNodeType ntype, int etype, int n)
 
   tn->ntype = ntype;
   tn->etype = etype;
+  tn->code_head = NULL;
+  tn->code_tail = NULL;
   ConstVal(tn) = n;
 
   return tn;
@@ -389,6 +391,8 @@ tnode *mkStrNode(char *s)
 
   tn->ntype = Stringcon;
   tn->etype = t_Array;
+  tn->code_head = NULL;
+  tn->code_tail = NULL;
   StrVal(tn) = s;
 
   return tn;
@@ -404,6 +408,8 @@ tnode *mkSymTabRefNode(SyntaxNodeType ntype, int etype, symtabnode *stptr, tnode
 
   tn->ntype = ntype;
   tn->etype = etype;
+  tn->code_head = NULL;
+  tn->code_tail = NULL;
 
   SymTabPtr(tn) = stptr;
   ExprPtr(tn) = t0; 
@@ -421,6 +427,8 @@ tnode *mkExprNode(SyntaxNodeType ntype, int etype, tnode *e1, tnode *e2)
 
   tn->ntype = ntype;
   tn->etype = etype;
+  tn->code_head = NULL;
+  tn->code_tail = NULL;
 
   LChild(tn) = e1;
   RChild(tn) = e2;
@@ -443,6 +451,8 @@ tnode *mkSTNode(SyntaxNodeType ntype,
 
   tn->ntype = ntype;
   tn->etype = etype;
+  tn->code_head = NULL;
+  tn->code_tail = NULL;
 
   Child0(tn) = x0;
   Child1(tn) = x1;
@@ -471,6 +481,8 @@ tnode *mkListNode(tnode *hd, tnode *tl)
 
   tn->ntype = STnodeList;
   tn->etype = t_None;
+  tn->code_head = NULL;
+  tn->code_tail = NULL;
 
   LChild(tn) = hd;
   RChild(tn) = tl;

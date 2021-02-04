@@ -19,10 +19,10 @@ int ival;
 int linenum = 1;
 %}
 
-letter	    [a-zA-Z]
-digit	    [0-9]
-alfa	    [a-zA-Z0-9_]
-whitesp	    [ \t]
+letter	    [[:alpha:]]
+digit	    [[:digit:]]
+alfa	    [[:alpha:][:digit:]_]
+whitesp	    [[:space:]]
 %%
 "/*"			BEGIN(Comment);
 <Comment>[^*\n]*	;
