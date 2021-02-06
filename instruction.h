@@ -9,33 +9,45 @@
 #include "global.h"
 #include "symbol-table.h"
 
-typedef enum OperationType {
-  OP_Assign_Int,
-  OP_Assign_Char,
-  OP_Assign_Str,
-  OP_Assign,
-  OP_Call,
-  OP_Param,
-  OP_Retrieve,
-  OP_Enter,
-  OP_Return,
-  OP_String,
-  OP_Global
-} OperationType;
+typedef enum InstructionType {
+  I_Assign_Int,
+  I_Assign_Char,
+  I_Assign_Str,
+  I_Assign,
+  I_Call,
+  I_Param,
+  I_Retrieve,
+  I_Enter,
+  I_Return,
+  I_String,
+  I_Global,
+  I_UMinus,
+  I_BinaryArithmetic
+} InstructionType;
+
+typedef enum ExprType {
+  IT_Int,
+  IT_Char,
+  IT_Plus,
+  IT_BinaryMinus,
+  IT_Mult,
+  IT_Div
+} ExprType;
 
 typedef struct instr_node {
-  OperationType op_type;
+  InstructionType i_type;
   symtabnode *dest;
-  char* label;
+  char *label;
+  ExprType
+      type; // type of the data char, int or type of an operation +, -. *, /...
 
   union {
     struct op_members {
-        symtabnode *src1;
-        symtabnode *src2;
+      symtabnode *src1;
+      symtabnode *src2;
     } op_members;
     int const_int;
-    char* const_char;
-    int type;
+    char *const_char;
   } val;
 
   struct instr_node *next;
@@ -54,15 +66,29 @@ inode *create_label_instruction();
 /**
  * Creates a pointer to a 3-address instruction.
  *
- * @param op_type: type of the operation
+ * @param i_type: type of the operation
  * @param src1: first operand
  * @param src2: second operand
  * @param dest: destination to store the result of the operation
  *
  * @return new instruction
  */
-inode *create_instruction(OperationType op_type, symtabnode *src1,
+inode *create_instruction(InstructionType i_type, symtabnode *src1,
                           symtabnode *src2, symtabnode *dest);
+
+/**
+ * Creates an instruction for an expression.
+ *
+ * @param op_type: type of the operation
+ * @param src1: first operand
+ * @param src2: second operand
+ * @param dest: destination to store the result of the operation
+ * @param type: expression type
+ * @return
+ */
+inode *create_expr_instruction(InstructionType op_type, symtabnode *src1,
+                               symtabnode *src2, symtabnode *dest,
+                               ExprType type);
 
 /**
  * Creates an instruction for a constant integer.
@@ -91,7 +117,7 @@ inode *create_const_char_instruction(int char_val, symtabnode *dest);
  *
  * @return new instruction
  */
-inode *create_const_string_instruction(char* str_label);
+inode *create_const_string_instruction(char *str_label);
 
 /**
  * Creates an instruction for a global string and adds it to the list of
@@ -101,20 +127,20 @@ inode *create_const_string_instruction(char* str_label);
  *
  * @return new instruction
  */
-inode* create_string_instruction(char* str);
+inode *create_string_instruction(char *str);
 
 /**
  * Append a string instruction to the list of all string instructions already
  * created.
  */
-void save_string_instruction(inode* instruction);
+void save_string_instruction(inode *instruction);
 
 /**
  * Return head of the list of string instructions.
  *
  * @return pointer to string instruction head
  */
-inode* get_string_instruction_head();
+inode *get_string_instruction_head();
 
 /**
  * Creates an instruction for declaration of a global variable.
@@ -124,8 +150,7 @@ inode* get_string_instruction_head();
  *
  * @return new instruction
  */
-inode *create_global_decl_instruction(char* id_name, int type);
-
+inode *create_global_decl_instruction(char *id_name, int data_type);
 
 #define SRC1(x) (x)->val.op_members.src1
 #define SRC2(x) (x)->val.op_members.src2
@@ -133,6 +158,5 @@ inode *create_global_decl_instruction(char* id_name, int type);
 #define LABEL(x) (x)->val.label
 #define CINT(x) (x)->val.const_int
 #define CCHAR(x) (x)->val.const_char
-
 
 #endif // CSC553_INSTRUCTION_H

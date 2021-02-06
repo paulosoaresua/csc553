@@ -10,6 +10,9 @@
 static void print_println();
 static void print_function_header(char *function_name);
 static char get_word_or_byte(int type);
+static void load_to_register(symtabnode *addr, int reg, int dest_type);
+static void store_at_memory(symtabnode *addr, int reg);
+static char* get_operation_name(ExprType type);
 
 void print_pre_defined_instructions() {
   print_println();
@@ -22,9 +25,9 @@ void print_function(tnode *node) {
   inode *curr_instruction = node->code_head;
 
   while (curr_instruction) {
-    switch (curr_instruction->op_type) {
-    case OP_Global: {
-      if (!last_instruction || last_instruction->op_type != OP_Global) {
+    switch (curr_instruction->i_type) {
+    case I_Global: {
+      if (!last_instruction || last_instruction->i_type != I_Global) {
         printf("\n");
         printf("# -------------------------- \n");
         printf("# GLOBALS                    \n");
@@ -32,20 +35,22 @@ void print_function(tnode *node) {
         printf(".data \n");
       }
 
-      switch (curr_instruction->val.type) {
-      case t_Int:
+      switch (curr_instruction->type) {
+      case IT_Int:
         printf("%s:.space 4 \n", curr_instruction->label);
         break;
-      case t_Char:
+      case IT_Char:
         printf("%s:.space 1 \n", curr_instruction->label);
         printf(".align 2 \n");
+        break;
+      default:
         break;
       }
 
       break;
     }
-    case OP_Enter: {
-      if (last_instruction && last_instruction->op_type == OP_Global) {
+    case I_Enter: {
+      if (last_instruction && last_instruction->i_type == I_Global) {
         printf("\n.text \n");
       }
 
@@ -60,9 +65,9 @@ void print_function(tnode *node) {
       break;
     }
 
-    case OP_Assign_Int:
+    case I_Assign_Int:
       printf("\n");
-      printf("  # OP_Assign_Int \n");
+      printf("  # I_Assign_Int \n");
       int n = curr_instruction->val.const_int;
       int high = (n >> 16);
       int low = (n & 0xffff);
@@ -75,82 +80,80 @@ void print_function(tnode *node) {
       printf("  sw $t0, %d($fp) \n", curr_instruction->dest->fp_offset);
       break;
 
-    case OP_Assign_Char:
+    case I_Assign_Char:
       printf("\n");
-      printf("  # OP_Assign_Char \n");
+      printf("  # I_Assign_Char \n");
       printf("  li $t0, %d       \n", curr_instruction->val.const_int);
       printf("  sb $t0, %d($fp) \n", curr_instruction->dest->fp_offset);
       break;
 
-    case OP_Assign_Str:
+    case I_Assign_Str:
       // TODO - milestone 2
       // Load from the globals
       break;
 
-    case OP_Assign:
+    case I_Assign:
       printf("\n");
-      printf("  # OP_Assign      \n");
-      char word_or_byte = get_word_or_byte(DEST(curr_instruction)->type);
-
-      // Source
-      if (SRC1(curr_instruction)->scope == Global) {
-        printf("  l%c $t0, %s \n", word_or_byte, SRC1(curr_instruction)->name);
-      } else {
-        printf("  l%c $t0, %d($fp) \n", word_or_byte,
-               SRC1(curr_instruction)->fp_offset);
-      }
-
-      // Destiny
-      if (DEST(curr_instruction)->scope == Global) {
-        printf("  sw $t0, %s \n", DEST(curr_instruction)->name);
-      } else {
-        printf("  sw $t0, %d($fp) \n", DEST(curr_instruction)->fp_offset);
-      }
-
+      printf("  # I_Assign      \n");
+      load_to_register(SRC1(curr_instruction), 0, DEST(curr_instruction)->type);
+      store_at_memory(DEST(curr_instruction), 0);
       break;
 
-    case OP_Param: {
+    case I_Param: {
       printf("\n");
-      printf("  # OP_Param       \n");
-
-      char word_or_byte = get_word_or_byte(SRC1(curr_instruction)->type);
-      if (SRC1(curr_instruction)->scope == Global) {
-        printf("  l%c $t0, %s \n", word_or_byte, SRC1(curr_instruction)->name);
-      } else {
-        printf("  l%c $t0, %d($fp) \n", word_or_byte, SRC1(curr_instruction)
-        ->fp_offset);
-      }
+      printf("  # I_Param       \n");
+      load_to_register(SRC1(curr_instruction), 0, SRC1(curr_instruction)->type);
       printf("  la $sp, -4($sp)  \n");
       printf("  sw $t0, 0($sp)   \n");
       break;
     }
 
-    case OP_Call: {
+    case I_Call: {
       symtabnode *function_ptr = SRC1(curr_instruction);
       printf("\n");
-      printf("  # OP_Call       \n");
+      printf("  # I_Call       \n");
       printf("  jal _%s         \n", function_ptr->name);
       printf("  la $sp, %d($sp) \n", 4 * function_ptr->num_formals);
       break;
     }
 
-    case OP_Return: {
+    case I_Return:
       // TODO - handle return of values for milestone 2
       printf("\n");
-      printf("  # OP_Return    \n");
+      printf("  # I_Return    \n");
       printf("  la $sp, 0($fp) \n");
       printf("  lw $ra, 0($sp) \n");
       printf("  lw $fp, 4($sp) \n");
       printf("  la $sp, 8($sp) \n");
       printf("  jr $ra         \n");
       break;
+
+    case I_UMinus:
+      printf("\n");
+      printf("  # I_UMinus    \n");
+      // Load the content from src1 into $t0
+      load_to_register(SRC1(curr_instruction), 0, SRC1(curr_instruction)->type);
+      printf("  neg $t1, $t0 \n");
+      store_at_memory(DEST(curr_instruction), 1);
+      break;
+
+    case I_BinaryArithmetic: {
+      printf("\n");
+      printf("  # I_BinaryArithmetic    \n");
+      load_to_register(SRC1(curr_instruction), 0, SRC1(curr_instruction)->type);
+      load_to_register(SRC2(curr_instruction), 1, SRC2(curr_instruction)->type);
+      char* op_name = get_operation_name(curr_instruction->type);
+      printf("  %s $t2, $t0, $t1 \n", op_name);
+      store_at_memory(DEST(curr_instruction), 2);
+      break;
     }
+
 
     default:
       break;
 
       // TODO - milestone 2
-      //    case OP_Retrieve: {
+      //    case I_Retrieve: {
       //      printf("la $sp, 0($fp) # deallocate locals \n");
       //      printf("lw $ra, 0($sp) # restore return address \n");
       //      printf("lw $fp, 4($sp) # restore frame pointer \n");
@@ -206,6 +209,40 @@ static char get_word_or_byte(int type) {
   }
 
   return word_or_byte;
+}
+
+static void load_to_register(symtabnode *addr, int reg, int dest_type) {
+  char word_or_byte = get_word_or_byte(dest_type);
+
+  if (addr->scope == Global) {
+    printf("  l%c $t%d, %s \n", word_or_byte, reg, addr->name);
+  } else {
+    printf("  l%c $t%d, %d($fp) \n", word_or_byte, reg, addr->fp_offset);
+  }
+}
+
+static void store_at_memory(symtabnode *addr, int reg) {
+  if (addr->scope == Global) {
+    printf("  sw $t%d, %s \n", reg, addr->name);
+  } else {
+    printf("  sw $t%d, %d($fp) \n", reg, addr->fp_offset);
+  }
+}
+
+static char* get_operation_name(ExprType type) {
+  switch (type) {
+  case IT_Plus:
+    return "add";
+  case IT_BinaryMinus:
+    return "sub";
+  case IT_Mult:
+    return "mul";
+  case IT_Div:
+    return "div";
+  default:
+    fprintf(stderr, "Invalid operation type %d.\n", type);
+    return "";
+  }
 }
 
 void print_strings() {
