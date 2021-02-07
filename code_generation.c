@@ -123,14 +123,12 @@ void generate_function_code(tnode *node, int lr_type) {
     instruction = create_instruction(I_Call, function_ptr, NULL, NULL);
     append_instruction(instruction, node);
 
-    // TODO -  Second milestone
-    // if (function_ptr->ret_type != t_None) {
-    //   node->place = tmp;
-    //   instruction = create_instruction(OP_Retrieve, NULL, NULL,
-    //   function_ptr);
-    //   append_instruction(instruction, node);
-    // }
-
+    if (function_ptr->ret_type != t_None) {
+      tmp = create_temporary(function_ptr->ret_type);
+      node->place = tmp;
+      instruction = create_instruction(I_Retrieve, NULL, NULL, tmp);
+      append_instruction(instruction, node);
+    }
     break;
   }
 
@@ -143,10 +141,12 @@ void generate_function_code(tnode *node, int lr_type) {
   }
 
   case Return:
-    // TODO - second milestone
-    // tmp = create_temporary(stReturn(node)->etype);
-    // node->place = tmp;
-    instruction = create_instruction(I_Return, NULL, NULL, NULL);
+    if(stReturn(node)) {
+      generate_function_code(stReturn(node), R_VALUE);
+      append_child_instructions(stReturn(node), node);
+      node->place = stReturn(node)->place;
+    }
+    instruction = create_instruction(I_Return, NULL, NULL, node->place);
     append_instruction(instruction, node);
     break;
 

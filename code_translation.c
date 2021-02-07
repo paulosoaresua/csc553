@@ -10,8 +10,8 @@
 static void print_println();
 static void print_function_header(char *function_name);
 static char get_word_or_byte(int type);
-static void load_to_register(symtabnode *addr, int reg, int dest_type);
-static void store_at_memory(symtabnode *addr, int reg);
+static void load_to_register(symtabnode *addr, char* reg, int dest_type);
+static void store_at_memory(symtabnode *addr, char* reg);
 static char* get_operation_name(ExprType type);
 
 void print_pre_defined_instructions() {
@@ -95,14 +95,15 @@ void print_function(tnode *node) {
     case I_Assign:
       printf("\n");
       printf("  # I_Assign      \n");
-      load_to_register(SRC1(curr_instruction), 0, DEST(curr_instruction)->type);
-      store_at_memory(DEST(curr_instruction), 0);
+      load_to_register(SRC1(curr_instruction), "$t0", DEST(curr_instruction)
+      ->type);
+      store_at_memory(DEST(curr_instruction), "$t0");
       break;
 
     case I_Param: {
       printf("\n");
       printf("  # I_Param       \n");
-      load_to_register(SRC1(curr_instruction), 0, SRC1(curr_instruction)->type);
+      load_to_register(SRC1(curr_instruction), "$t0", SRC1(curr_instruction)->type);
       printf("  la $sp, -4($sp)  \n");
       printf("  sw $t0, 0($sp)   \n");
       break;
@@ -118,9 +119,12 @@ void print_function(tnode *node) {
     }
 
     case I_Return:
-      // TODO - handle return of values for milestone 2
       printf("\n");
       printf("  # I_Return    \n");
+      if (DEST(curr_instruction)) {
+        load_to_register(DEST(curr_instruction), "$v0", DEST
+        (curr_instruction)->type);
+      }
       printf("  la $sp, 0($fp) \n");
       printf("  lw $ra, 0($sp) \n");
       printf("  lw $fp, 4($sp) \n");
@@ -128,23 +132,28 @@ void print_function(tnode *node) {
       printf("  jr $ra         \n");
       break;
 
+    case I_Retrieve:
+      store_at_memory(DEST(curr_instruction), "$v0");
+      break;
+
     case I_UMinus:
       printf("\n");
       printf("  # I_UMinus    \n");
       // Load the content from src1 into $t0
-      load_to_register(SRC1(curr_instruction), 0, SRC1(curr_instruction)->type);
+      load_to_register(SRC1(curr_instruction), "$t0", SRC1(curr_instruction)->type);
       printf("  neg $t1, $t0 \n");
-      store_at_memory(DEST(curr_instruction), 1);
+      store_at_memory(DEST(curr_instruction), "$t1");
       break;
 
     case I_BinaryArithmetic: {
       printf("\n");
       printf("  # I_BinaryArithmetic    \n");
-      load_to_register(SRC1(curr_instruction), 0, SRC1(curr_instruction)->type);
-      load_to_register(SRC2(curr_instruction), 1, SRC2(curr_instruction)->type);
+      load_to_register(SRC1(curr_instruction), "$t0", SRC1(curr_instruction)->type);
+      load_to_register(SRC2(curr_instruction), "$t1", SRC2(curr_instruction)
+      ->type);
       char* op_name = get_operation_name(curr_instruction->type);
       printf("  %s $t2, $t0, $t1 \n", op_name);
-      store_at_memory(DEST(curr_instruction), 2);
+      store_at_memory(DEST(curr_instruction), "$t2");
       break;
     }
 
@@ -211,21 +220,21 @@ static char get_word_or_byte(int type) {
   return word_or_byte;
 }
 
-static void load_to_register(symtabnode *addr, int reg, int dest_type) {
+static void load_to_register(symtabnode *addr, char* reg, int dest_type) {
   char word_or_byte = get_word_or_byte(dest_type);
 
   if (addr->scope == Global) {
-    printf("  l%c $t%d, %s \n", word_or_byte, reg, addr->name);
+    printf("  l%c %s, %s \n", word_or_byte, reg, addr->name);
   } else {
-    printf("  l%c $t%d, %d($fp) \n", word_or_byte, reg, addr->fp_offset);
+    printf("  l%c %s, %d($fp) \n", word_or_byte, reg, addr->fp_offset);
   }
 }
 
-static void store_at_memory(symtabnode *addr, int reg) {
+static void store_at_memory(symtabnode *addr, char* reg) {
   if (addr->scope == Global) {
-    printf("  sw $t%d, %s \n", reg, addr->name);
+    printf("  sw %s, %s \n", reg, addr->name);
   } else {
-    printf("  sw $t%d, %d($fp) \n", reg, addr->fp_offset);
+    printf("  sw %s, %d($fp) \n", reg, addr->fp_offset);
   }
 }
 
