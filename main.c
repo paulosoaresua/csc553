@@ -10,8 +10,8 @@ int status = 0;
 
 int main(void)
 {
-  freopen("../../ExampleInputs/codegen3.c", "r", stdin);
-  freopen("../../mips_code/codegen3.s", "w", stdout);
+//  freopen("../../ExampleInputs/codegen3.c", "r", stdin);
+//  freopen("../../mips_code/codegen3.s", "w", stdout);
 
   SymTabInit(Global);
   SymTabInit(Local);

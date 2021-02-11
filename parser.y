@@ -18,7 +18,6 @@
 
 extern int yylex();
 extern void yyerror();
-extern void printSyntaxTree(tnode *t, int n, int depth);
 extern void process_function_header(symtabnode *func_header, tnode *body);
 extern void generate_function_code(tnode *t, int lr_type);
 extern void process_allocations();
