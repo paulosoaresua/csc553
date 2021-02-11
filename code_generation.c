@@ -213,6 +213,62 @@ void generate_function_code(tnode *node, int lr_type) {
     break;
   }
 
+  case While: {
+    inode *label_body = create_label_instruction();
+    inode *label_eval = create_label_instruction();
+    inode *label_after = create_label_instruction();
+
+    // Jump to eval
+    instruction = create_jump_instruction(label_eval->label);
+    append_instruction(instruction, node);
+
+    // Body
+    generate_function_code(stWhile_Body(node), node);
+    append_instruction(label_body, node);
+    append_child_instructions(stWhile_Body(node), node);
+
+    // Eval
+    generate_bool_expr_code(stWhile_Test(node), label_body, label_after);
+    append_instruction(label_eval, node);
+    append_child_instructions(stWhile_Test(node), node);
+
+    // After the WHILE
+    append_instruction(label_after, node);
+    break;
+  }
+
+  case For: {
+    inode *label_body = create_label_instruction();
+    inode *label_eval = create_label_instruction();
+    inode *label_after = create_label_instruction();
+
+    // Initialization
+    generate_function_code(stFor_Init(node), node);
+    append_child_instructions(stFor_Init(node), node);
+
+    // Jump to eval
+    instruction = create_jump_instruction(label_eval->label);
+    append_instruction(instruction, node);
+
+    // Body
+    generate_function_code(stFor_Body(node), node);
+    append_instruction(label_body, node);
+    append_child_instructions(stFor_Body(node), node);
+
+    // Update
+    generate_function_code(stFor_Update(node), node);
+    append_child_instructions(stFor_Update(node), node);
+
+    // Eval
+    generate_bool_expr_code(stFor_Test(node), label_body, label_after);
+    append_instruction(label_eval, node);
+    append_child_instructions(stFor_Test(node), node);
+
+    // After the FOR
+    append_instruction(label_after, node);
+    break;
+  }
+
   default:
     break;
   }
