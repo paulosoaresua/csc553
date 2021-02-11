@@ -24,6 +24,7 @@ typedef struct stblnode {
   int byte_size;           // Byte size of the local variables and temporaries
   int fp_offset;           // Memory location as an offset of the frame pointer
   int num_formals;         // Number of formal parameters
+  char* const_str;        // Constant string
   struct stblnode *next;
 } symtabnode;
 
@@ -72,6 +73,23 @@ static int tmp_counter = 0;
  * @return pointer to the newly created entry
  */
 symtabnode *create_temporary(int type);
+
+/**
+ * Creates a symbol table node to contain a string constant. This node is not
+ * added to the symbol table, but collected separately.
+ *
+ * @param str: content of the string
+ *
+ * @return pointer to the newly created entry
+ */
+symtabnode *create_constant_string(char* str);
+
+/**
+ * Returns the head of the list of strings created.
+ *
+ * @return head of the string list
+ */
+symtabnode *get_string_list_head();
 
 /**
  * Traverses the local symbol table and fills memory address for each local

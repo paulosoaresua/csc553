@@ -92,17 +92,14 @@ void generate_function_code(tnode *node, int lr_type) {
     break;
 
   case Stringcon:
-    // TODO - milestone 2
-    //    if (lr_type == L_VALUE) {
-    //      fprintf(stderr, "Constant characters cannot be used as an
-    //      l-value.\n");
-    //    } else {
-    //      // Create a global label for the string
-    //      instruction = create_string_instruction(node->val.strconst);
-    //      // Save the label to be referenced later
-    //      instruction = create_const_char_instruction(instruction->label);
-    //      append_instruction(instruction, node);
-    //    }
+    if (lr_type == L_VALUE) {
+      fprintf(stderr, "A constant string cannot be used as an l-value.\n");
+      return;
+    } else {
+      // No instruction needed
+      tmp = create_constant_string(stStringcon(node));
+      node->place = tmp;
+    }
     break;
 
   case FunCall: {
@@ -223,7 +220,7 @@ void generate_function_code(tnode *node, int lr_type) {
     append_instruction(instruction, node);
 
     // Body
-    generate_function_code(stWhile_Body(node), node);
+    generate_function_code(stWhile_Body(node), lr_type);
     append_instruction(label_body, node);
     append_child_instructions(stWhile_Body(node), node);
 
@@ -243,7 +240,7 @@ void generate_function_code(tnode *node, int lr_type) {
     inode *label_after = create_label_instruction();
 
     // Initialization
-    generate_function_code(stFor_Init(node), node);
+    generate_function_code(stFor_Init(node), lr_type);
     append_child_instructions(stFor_Init(node), node);
 
     // Jump to eval
@@ -251,12 +248,12 @@ void generate_function_code(tnode *node, int lr_type) {
     append_instruction(instruction, node);
 
     // Body
-    generate_function_code(stFor_Body(node), node);
+    generate_function_code(stFor_Body(node), lr_type);
     append_instruction(label_body, node);
     append_child_instructions(stFor_Body(node), node);
 
     // Update
-    generate_function_code(stFor_Update(node), node);
+    generate_function_code(stFor_Update(node), lr_type);
     append_child_instructions(stFor_Update(node), node);
 
     // Eval

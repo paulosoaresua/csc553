@@ -107,6 +107,7 @@ void print_function(tnode *node) {
                        SRC1(curr_instruction)->type);
       printf("  la $sp, -4($sp)  \n");
       printf("  sw $t0, 0($sp)   \n");
+
       break;
     }
 
@@ -282,18 +283,18 @@ static char *get_operation_name(enum InstructionType type) {
 }
 
 void print_strings() {
-  inode *instruction = get_string_instruction_head();
-  if (instruction) {
+  symtabnode *str_node = get_string_list_head();
+  if (str_node) {
     printf("\n");
     printf("# -------------------------- \n");
     printf("# STRINGS                    \n");
     printf("# -------------------------- \n");
     printf(".data \n");
 
-    while (instruction) {
-      printf("%s: .asciiz \"%s\" \n", instruction->label,
-             instruction->val.const_char);
-      instruction = instruction->next;
+    while (str_node) {
+      printf("_%s: .asciiz \"%s\" \n", str_node->name, str_node->const_str);
+      printf(".align 2 \n");
+      str_node = str_node->next;
     }
   }
 }

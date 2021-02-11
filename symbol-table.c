@@ -44,6 +44,14 @@ static int get_byte_size(int type) {
   return size;
 }
 
+static int string_counter = 0;
+
+// Global variable that stores all the string instructions created
+struct StringList {
+  symtabnode *head;
+  symtabnode *tail;
+} string_list;
+
 /*
  * SymTabInit(sc)
  *
@@ -296,6 +304,35 @@ symtabnode *create_temporary(int type) {
   st_node->type = type;
   return st_node;
 }
+
+static void save_string_node (symtabnode * str_node) {
+  if (string_list.tail) {
+    string_list.tail->next = str_node;
+    string_list.tail = str_node;
+  } else {
+    string_list.head = str_node;
+    string_list.tail = str_node;
+  }
+}
+
+symtabnode *create_constant_string(char* str) {
+  symtabnode *str_node = (symtabnode *)zalloc(sizeof(symtabnode));
+  str_node->type = t_String;
+  str_node->scope = Global;
+  str_node->name = malloc(16 * sizeof(char));
+  sprintf(str_node->name, "_Str%d", string_counter++);
+  str_node->const_str = malloc(strlen(str) * sizeof(char));
+  str_node->const_str = strcpy(str_node->const_str, str);
+
+  save_string_node(str_node);
+
+  return str_node;
+}
+
+symtabnode *get_string_list_head() {
+  return string_list.head;
+}
+
 
 int fill_local_allocations() {
   int locals_byte_size = 0;
