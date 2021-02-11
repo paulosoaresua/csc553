@@ -17,14 +17,17 @@ inode *global_tail = NULL;
 static void append_child_instructions(tnode *child, tnode *parent);
 static void append_instruction(inode *instruction, tnode *node);
 static void append_instructions(inode *instructions, tnode *node);
-static void generate_binary_arithmetic_expr_code(tnode *node, ExprType type,
-                                                 int lr_type);
+static void generate_binary_expr_code(tnode *node, enum InstructionType type,
+                                      int lr_type);
+static void generate_bool_expr_code(tnode *node, inode *label_then,
+                                    inode *label_else);
+static enum InstructionType get_boolean_comp_type(SyntaxNodeType node_type);
 
 void process_function_header(symtabnode *func_header, tnode *body) {
   append_instructions(global_head, body);
   // This syntax tree node is the first node after a function if defined.
   // Therefore, we need to create an Enter instruction for it.
-  inode *instruction = create_instruction(I_Enter, func_header, NULL, NULL);
+  inode *instruction = create_instruction(OP_Enter, func_header, NULL, NULL);
   append_instruction(instruction, body);
 
   // Clear globals
@@ -53,7 +56,7 @@ void generate_function_code(tnode *node, int lr_type) {
     generate_function_code(stAssg_Rhs(node), R_VALUE);
     append_child_instructions(stAssg_Rhs(node), node);
 
-    instruction = create_instruction(I_Assign, stAssg_Rhs(node)->place, NULL,
+    instruction = create_instruction(OP_Assign, stAssg_Rhs(node)->place, NULL,
                                      stAssg_Lhs(node)->place);
     append_instruction(instruction, node);
     break;
@@ -112,7 +115,7 @@ void generate_function_code(tnode *node, int lr_type) {
     for (tnode *param = stFunCall_Args(node); param != NULL;
          param = stList_Rest(param)) {
       instruction =
-          create_instruction(I_Param, stList_Head(param)->place, NULL, NULL);
+          create_instruction(OP_Param, stList_Head(param)->place, NULL, NULL);
       // Actuals from the right to the left
       instruction->next = params_instructions;
       params_instructions = instruction;
@@ -120,13 +123,13 @@ void generate_function_code(tnode *node, int lr_type) {
     append_instructions(params_instructions, node);
 
     symtabnode *function_ptr = stFunCall_Fun(node);
-    instruction = create_instruction(I_Call, function_ptr, NULL, NULL);
+    instruction = create_instruction(OP_Call, function_ptr, NULL, NULL);
     append_instruction(instruction, node);
 
     if (function_ptr->ret_type != t_None) {
       tmp = create_temporary(function_ptr->ret_type);
       node->place = tmp;
-      instruction = create_instruction(I_Retrieve, NULL, NULL, tmp);
+      instruction = create_instruction(OP_Retrieve, NULL, NULL, tmp);
       append_instruction(instruction, node);
     }
     break;
@@ -141,58 +144,174 @@ void generate_function_code(tnode *node, int lr_type) {
   }
 
   case Return:
-    if(stReturn(node)) {
+    if (stReturn(node)) {
       generate_function_code(stReturn(node), R_VALUE);
       append_child_instructions(stReturn(node), node);
       node->place = stReturn(node)->place;
     }
-    instruction = create_instruction(I_Return, NULL, NULL, node->place);
+    instruction = create_instruction(OP_Return, NULL, NULL, node->place);
     append_instruction(instruction, node);
     break;
 
   case UnaryMinus:
-    generate_function_code(stUnop_Op(node), lr_type);
+    generate_function_code(stUnop_Op(node), R_VALUE);
     append_child_instructions(stUnop_Op(node), node);
     tmp = create_temporary(node->etype);
     node->place = tmp;
     instruction =
-        create_instruction(I_UMinus, stUnop_Op(node)->place, NULL, tmp);
+        create_instruction(OP_UMinus, stUnop_Op(node)->place, NULL, tmp);
     append_instruction(instruction, node);
     break;
 
   case Plus:
-    generate_binary_arithmetic_expr_code(node, IT_Plus, lr_type);
+    generate_binary_expr_code(node, IT_Plus, R_VALUE);
     break;
 
   case BinaryMinus:
-    generate_binary_arithmetic_expr_code(node, IT_BinaryMinus, lr_type);
+    generate_binary_expr_code(node, IT_BinaryMinus, R_VALUE);
     break;
 
   case Mult:
-    generate_binary_arithmetic_expr_code(node, IT_Mult, lr_type);
+    generate_binary_expr_code(node, IT_Mult, R_VALUE);
     break;
 
   case Div:
-    generate_binary_arithmetic_expr_code(node, IT_Div, lr_type);
+    generate_binary_expr_code(node, IT_Div, R_VALUE);
     break;
+
+  case If: {
+    inode *label_then = create_label_instruction();
+    inode *label_else = create_label_instruction();
+    inode *label_after = create_label_instruction();
+
+    // Boolean expression
+    if (stIf_Else(node)) {
+      generate_bool_expr_code(stIf_Test(node), label_then, label_else);
+    } else {
+      generate_bool_expr_code(stIf_Test(node), label_then, label_after);
+    }
+    append_child_instructions(stIf_Test(node), node);
+
+    // Then block
+    append_instruction(label_then, node);
+    generate_function_code(stIf_Then(node), lr_type);
+    append_child_instructions(stIf_Then(node), node);
+
+    if (stIf_Else(node)) {
+      // Jump to after the IF statement
+      instruction = create_jump_instruction(label_after->label);
+      append_instruction(instruction, node);
+
+      // Else block
+      append_instruction(label_else, node);
+      generate_function_code(stIf_Else(node), lr_type);
+      append_child_instructions(stIf_Else(node), node);
+    }
+
+    // Label AFTER
+    append_instruction(label_after, node);
+    break;
+  }
 
   default:
     break;
   }
 }
 
-static void generate_binary_arithmetic_expr_code(tnode *node, ExprType type,
-                                                 int lr_type) {
+static void generate_binary_expr_code(tnode *node, enum InstructionType type,
+                                      int lr_type) {
   generate_function_code(stBinop_Op1(node), lr_type);
   append_child_instructions(stBinop_Op1(node), node);
   generate_function_code(stBinop_Op2(node), lr_type);
   append_child_instructions(stBinop_Op2(node), node);
   symtabnode *tmp = create_temporary(node->etype);
   node->place = tmp;
-  inode *instruction = create_expr_instruction(
-      I_BinaryArithmetic, stBinop_Op1(node)->place, stBinop_Op2(node)->place,
-      tmp, type);
+  inode *instruction =
+      create_expr_instruction(OP_BinaryArithmetic, stBinop_Op1(node)->place,
+                              stBinop_Op2(node)->place, tmp, type);
   append_instruction(instruction, node);
+}
+
+static void generate_bool_expr_code(tnode *node, inode *label_true,
+                                    inode *label_false) {
+
+  inode *instruction;
+
+  switch (node->ntype) {
+  case LogicalAnd: {
+    inode *label_next = create_label_instruction();
+    generate_bool_expr_code(stBinop_Op1(node), label_next, label_false);
+    generate_bool_expr_code(stBinop_Op2(node), label_true, label_false);
+
+    append_child_instructions(stBinop_Op1(node), node);
+    append_instruction(label_next, node);
+    append_child_instructions(stBinop_Op2(node), node);
+    break;
+  }
+  case LogicalOr: {
+    inode *label_next = create_label_instruction();
+    generate_bool_expr_code(stBinop_Op1(node), label_true, label_next);
+    generate_bool_expr_code(stBinop_Op2(node), label_true, label_false);
+
+    append_child_instructions(stBinop_Op1(node), node);
+    append_instruction(label_next, node);
+    append_child_instructions(stBinop_Op2(node), node);
+    break;
+  }
+  case LogicalNot: {
+    generate_bool_expr_code(stUnop_Op(node), label_false, label_true);
+    append_child_instructions(stUnop_Op(node), node);
+    break;
+  }
+  case Leq:
+  case Equals:
+  case Lt:
+  case Gt:
+  case Neq:
+  case Geq: {
+    generate_function_code(stBinop_Op1(node), R_VALUE);
+    generate_function_code(stBinop_Op2(node), R_VALUE);
+
+    append_child_instructions(stBinop_Op1(node), node);
+    append_child_instructions(stBinop_Op2(node), node);
+
+    enum InstructionType type = get_boolean_comp_type(node->ntype);
+    instruction = create_cond_jump_instruction(OP_If, stBinop_Op1(node)->place,
+                                               stBinop_Op2(node)->place,
+                                               label_true->label, type);
+    append_instruction(instruction, node);
+
+    instruction = create_jump_instruction(label_false->label);
+    append_instruction(instruction, node);
+    break;
+  }
+
+  default:
+    break;
+  }
+}
+
+static enum InstructionType get_boolean_comp_type(SyntaxNodeType node_type) {
+  switch (node_type) {
+  case Leq:
+    return IT_LE;
+  case Equals:
+    return IT_EQ;
+  case Lt:
+    return IT_LT;
+  case Gt:
+    return IT_GT;
+  case Neq:
+    return IT_NE;
+  case Geq:
+    return IT_GE;
+  default:
+    fprintf(stderr,
+            "Invalid syntax node type for boolean expression "
+            "evaluation. %d.\n",
+            node_type);
+    return -1;
+  }
 }
 
 void collect_global(char *id_name, int type, int scope) {

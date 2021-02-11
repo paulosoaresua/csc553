@@ -9,37 +9,45 @@
 #include "global.h"
 #include "symbol-table.h"
 
-typedef enum InstructionType {
-  I_Assign_Int,
-  I_Assign_Char,
-  I_Assign_Str,
-  I_Assign,
-  I_Call,
-  I_Param,
-  I_Retrieve,
-  I_Enter,
-  I_Return,
-  I_String,
-  I_Global,
-  I_UMinus,
-  I_BinaryArithmetic
-} InstructionType;
+typedef enum OpType {
+  OP_Assign_Int,
+  OP_Assign_Char,
+  OP_Assign_Str,
+  OP_Assign,
+  OP_Call,
+  OP_Param,
+  OP_Retrieve,
+  OP_Enter,
+  OP_Return,
+  OP_String,
+  OP_Global,
+  OP_UMinus,
+  OP_BinaryArithmetic,
+  OP_Label,
+  OP_If,
+  OP_Goto,
+} OPType;
 
-typedef enum ExprType {
+typedef enum InstructionType {
   IT_Int,
   IT_Char,
   IT_Plus,
   IT_BinaryMinus,
   IT_Mult,
-  IT_Div
-} ExprType;
+  IT_Div,
+  IT_LE,
+  IT_EQ,
+  IT_LT,
+  IT_GT,
+  IT_NE,
+  IT_GE,
+} InstructionType;
 
 typedef struct instr_node {
-  InstructionType i_type;
+  enum OpType op_type;
   symtabnode *dest;
   char *label;
-  ExprType
-      type; // type of the data char, int or type of an operation +, -. *, /...
+  enum InstructionType type;
 
   union {
     struct op_members {
@@ -73,7 +81,7 @@ inode *create_label_instruction();
  *
  * @return new instruction
  */
-inode *create_instruction(InstructionType i_type, symtabnode *src1,
+inode *create_instruction(enum OpType i_type, symtabnode *src1,
                           symtabnode *src2, symtabnode *dest);
 
 /**
@@ -86,9 +94,9 @@ inode *create_instruction(InstructionType i_type, symtabnode *src1,
  * @param type: expression type
  * @return
  */
-inode *create_expr_instruction(InstructionType op_type, symtabnode *src1,
+inode *create_expr_instruction(enum OpType op_type, symtabnode *src1,
                                symtabnode *src2, symtabnode *dest,
-                               ExprType type);
+                               enum InstructionType type);
 
 /**
  * Creates an instruction for a constant integer.
@@ -152,11 +160,29 @@ inode *get_string_instruction_head();
  */
 inode *create_global_decl_instruction(char *id_name, int data_type);
 
+/**
+ * Creates a conditional jump instruction to jump to a label.
+ *
+  * @param op_type: type of the operation
+ * @param src1: first operand
+ * @param src2: second operand
+ * @param label: label to jump to
+ * @param type: type of the comparison
+ * @return
+ */
+inode *create_cond_jump_instruction(enum OpType op_type, symtabnode *src1,
+                               symtabnode *src2, char *label,
+                               enum InstructionType type);
+
+/**
+ * Creates an unconditional jump instruction.
+ *
+ * @param label: label to jump to
+ * @return
+ */
+inode *create_jump_instruction(char *label);
+
 #define SRC1(x) (x)->val.op_members.src1
 #define SRC2(x) (x)->val.op_members.src2
-#define DEST(x) (x)->dest
-#define LABEL(x) (x)->val.label
-#define CINT(x) (x)->val.const_int
-#define CCHAR(x) (x)->val.const_char
 
 #endif // CSC553_INSTRUCTION_H

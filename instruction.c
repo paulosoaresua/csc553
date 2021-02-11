@@ -6,23 +6,22 @@
 #include "instruction.h"
 
 // Global variable that stores all the string instructions created
-static inode* string_instructions_head = NULL;
+static inode *string_instructions_head = NULL;
 
 inode *create_label_instruction() {
+  inode *instruction = zalloc(sizeof(*instruction));
+  instruction->label = malloc(16* sizeof(char));
+  sprintf(instruction->label, "_L%d", label_counter++);
+  instruction->op_type = OP_Label;
 
-  return NULL;
-//  inode* instruction = zalloc(sizeof(*instruction));
-//  instruction->i_type = OP_Label;
-//  instruction->val.label = src1;
-//
-//  return instruction;
+  return instruction;
 }
 
-inode *create_instruction(InstructionType i_type, symtabnode *src1,
+inode *create_instruction(enum OpType i_type, symtabnode *src1,
                           symtabnode *src2, symtabnode *dest) {
 
-  inode* instruction = zalloc(sizeof(*instruction));
-  instruction->i_type = i_type;
+  inode *instruction = zalloc(sizeof(*instruction));
+  instruction->op_type = i_type;
   instruction->val.op_members.src1 = src1;
   instruction->val.op_members.src2 = src2;
   instruction->dest = dest;
@@ -30,44 +29,44 @@ inode *create_instruction(InstructionType i_type, symtabnode *src1,
   return instruction;
 }
 
-inode *create_expr_instruction(InstructionType i_type, symtabnode *src1,
+inode *create_expr_instruction(enum OpType i_type, symtabnode *src1,
                                symtabnode *src2, symtabnode *dest,
-                               ExprType type) {
-  inode* instruction = create_instruction(i_type, src1, src2, dest);
+                               enum InstructionType type) {
+  inode *instruction = create_instruction(i_type, src1, src2, dest);
   instruction->type = type;
 
   return instruction;
 }
 
-inode *create_const_int_instruction(int int_val, symtabnode *dest){
-  inode* instruction = zalloc(sizeof(*instruction));
-  instruction->i_type = I_Assign_Int;
+inode *create_const_int_instruction(int int_val, symtabnode *dest) {
+  inode *instruction = zalloc(sizeof(*instruction));
+  instruction->op_type = OP_Assign_Int;
   instruction->val.const_int = int_val;
   instruction->dest = dest;
 
   return instruction;
 }
 
-inode *create_const_char_instruction(int char_val, symtabnode *dest){
-  inode* instruction = zalloc(sizeof(*instruction));
-  instruction->i_type = I_Assign_Char;
+inode *create_const_char_instruction(int char_val, symtabnode *dest) {
+  inode *instruction = zalloc(sizeof(*instruction));
+  instruction->op_type = OP_Assign_Char;
   instruction->val.const_int = char_val;
   instruction->dest = dest;
 
   return instruction;
 }
 
-inode *create_const_string_instruction(char* str_label){
-  inode* instruction = zalloc(sizeof(*instruction));
-  instruction->i_type = I_Assign_Str;
+inode *create_const_string_instruction(char *str_label) {
+  inode *instruction = zalloc(sizeof(*instruction));
+  instruction->op_type = OP_Assign_Str;
   instruction->label = str_label;
 
   return instruction;
 }
 
-inode* create_string_instruction(char* str) {
-  inode* instruction = zalloc(sizeof(*instruction));
-  instruction->i_type = I_String;
+inode *create_string_instruction(char *str) {
+  inode *instruction = zalloc(sizeof(*instruction));
+  instruction->op_type = OP_String;
   instruction->val.const_char = malloc(strlen(str) * sizeof(char));
   instruction->val.const_char = strcpy(instruction->val.const_char, str);
 
@@ -80,7 +79,7 @@ inode* create_string_instruction(char* str) {
   return instruction;
 }
 
-void save_string_instruction(inode* instruction) {
+void save_string_instruction(inode *instruction) {
   if (string_instructions_head) {
     string_instructions_head->next = instruction;
   } else {
@@ -88,14 +87,13 @@ void save_string_instruction(inode* instruction) {
   }
 }
 
-inode* get_string_instruction_head() {
-  return string_instructions_head;
-}
+inode *get_string_instruction_head() { return string_instructions_head; }
 
-inode *create_global_decl_instruction(char* id_name, int data_type) {
-  inode* instruction = zalloc(sizeof(*instruction));
-  instruction->i_type = I_Global;
-  instruction->label = id_name;
+inode *create_global_decl_instruction(char *id_name, int data_type) {
+  inode *instruction = zalloc(sizeof(*instruction));
+  instruction->op_type = OP_Global;
+  instruction->label  = malloc(strlen(id_name) * sizeof(char));
+  instruction->label  = strcpy(instruction->label , id_name);
 
   switch (data_type) {
   case t_Int:
@@ -106,5 +104,19 @@ inode *create_global_decl_instruction(char* id_name, int data_type) {
     break;
   }
 
+  return instruction;
+}
+
+inode *create_cond_jump_instruction(enum OpType op_type, symtabnode *src1,
+                                    symtabnode *src2, char *label,
+                                    enum InstructionType type) {
+  inode *instruction = create_expr_instruction(op_type, src1, src2, NULL, type);
+  instruction->label  = label;
+  return instruction;
+}
+
+inode *create_jump_instruction(char *label) {
+  inode *instruction = create_instruction(OP_Goto, NULL, NULL, NULL);
+  instruction->label = label;
   return instruction;
 }
