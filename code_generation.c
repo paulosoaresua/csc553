@@ -370,9 +370,9 @@ static enum InstructionType get_boolean_comp_type(SyntaxNodeType node_type) {
   }
 }
 
-void collect_global(char *id_name, int type, int scope) {
-  if (scope == Global) {
-    inode *instruction = create_global_decl_instruction(id_name, type);
+void collect_global(symtabnode *var) {
+  if (var->scope == Global) {
+    inode *instruction = create_global_decl_instruction(var);
     if (!global_head) {
       global_head = instruction;
       global_tail = global_head;

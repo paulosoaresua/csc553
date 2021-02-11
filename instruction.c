@@ -11,7 +11,7 @@ static inode *string_instructions_head = NULL;
 inode *create_label_instruction() {
   inode *instruction = zalloc(sizeof(*instruction));
   instruction->label = malloc(16* sizeof(char));
-  sprintf(instruction->label, "_L%d", label_counter++);
+  sprintf(instruction->label, "L%d", label_counter++);
   instruction->op_type = OP_Label;
 
   return instruction;
@@ -89,20 +89,10 @@ void save_string_instruction(inode *instruction) {
 
 inode *get_string_instruction_head() { return string_instructions_head; }
 
-inode *create_global_decl_instruction(char *id_name, int data_type) {
+inode *create_global_decl_instruction(symtabnode *var) {
   inode *instruction = zalloc(sizeof(*instruction));
   instruction->op_type = OP_Global;
-  instruction->label  = malloc(strlen(id_name) * sizeof(char));
-  instruction->label  = strcpy(instruction->label , id_name);
-
-  switch (data_type) {
-  case t_Int:
-    instruction->type = IT_Int;
-    break;
-  case t_Char:
-    instruction->type = IT_Char;
-    break;
-  }
+  instruction->val.op_members.src1 = var;
 
   return instruction;
 }

@@ -29,8 +29,6 @@ typedef enum OpType {
 } OPType;
 
 typedef enum InstructionType {
-  IT_Int,
-  IT_Char,
   IT_Plus,
   IT_BinaryMinus,
   IT_Mult,
@@ -153,12 +151,11 @@ inode *get_string_instruction_head();
 /**
  * Creates an instruction for declaration of a global variable.
  *
- * @param id_name: name of the variable
- * @param type: type of the variable
+ * @param var: symbol table entry for the global variable
  *
  * @return new instruction
  */
-inode *create_global_decl_instruction(char *id_name, int data_type);
+inode *create_global_decl_instruction(symtabnode *var);
 
 /**
  * Creates a conditional jump instruction to jump to a label.

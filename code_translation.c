@@ -35,12 +35,12 @@ void print_function(tnode *node) {
         printf(".data \n");
       }
 
-      switch (curr_instruction->type) {
-      case IT_Int:
-        printf("%s:.space 4 \n", curr_instruction->label);
+      switch (SRC1(curr_instruction)->type) {
+      case t_Int:
+        printf("_%s:.space 4 \n", SRC1(curr_instruction)->name);
         break;
-      case IT_Char:
-        printf("%s:.space 1 \n", curr_instruction->label);
+      case t_Char:
+        printf("_%s:.space 1 \n", SRC1(curr_instruction)->name);
         printf(".align 2 \n");
         break;
       default:
@@ -163,7 +163,7 @@ void print_function(tnode *node) {
     case OP_Label:
       printf("\n");
       printf("  # OP_Label \n");
-      printf("  %s:       \n", curr_instruction->label);
+      printf("  _%s:       \n", curr_instruction->label);
       break;
 
     case OP_If:
@@ -174,13 +174,13 @@ void print_function(tnode *node) {
       load_to_register(SRC2(curr_instruction), "$t1",
                        SRC2(curr_instruction)->type);
       char *op_name = get_operation_name(curr_instruction->type);
-      printf("  b%s $t0, $t1, %s \n", op_name, curr_instruction->label);
+      printf("  b%s $t0, $t1, _%s \n", op_name, curr_instruction->label);
       break;
 
     case OP_Goto:
       printf("\n");
       printf("  # OP_Goto \n");
-      printf("  j %s    \n", curr_instruction->label);
+      printf("  j _%s     \n", curr_instruction->label);
       break;
 
     default:
@@ -226,7 +226,7 @@ static void print_function_header(char *function_name) {
 
 static char get_word_or_byte(int type) {
   char word_or_byte;
-  if (type == t_Char) {
+  if (type == t_Char || type == t_Bool) {
     word_or_byte = 'b';
   } else {
     word_or_byte = 'w';
@@ -239,7 +239,7 @@ static void load_to_register(symtabnode *addr, char *reg, int dest_type) {
   char word_or_byte = get_word_or_byte(dest_type);
 
   if (addr->scope == Global) {
-    printf("  l%c %s, %s \n", word_or_byte, reg, addr->name);
+    printf("  l%c %s, _%s \n", word_or_byte, reg, addr->name);
   } else {
     printf("  l%c %s, %d($fp) \n", word_or_byte, reg, addr->fp_offset);
   }
@@ -247,7 +247,7 @@ static void load_to_register(symtabnode *addr, char *reg, int dest_type) {
 
 static void store_at_memory(symtabnode *addr, char *reg) {
   if (addr->scope == Global) {
-    printf("  sw %s, %s \n", reg, addr->name);
+    printf("  sw %s, _%s \n", reg, addr->name);
   } else {
     printf("  sw %s, %d($fp) \n", reg, addr->fp_offset);
   }
