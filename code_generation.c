@@ -257,9 +257,15 @@ void generate_function_code(tnode *node, int lr_type) {
     append_child_instructions(stFor_Update(node), node);
 
     // Eval
-    generate_bool_expr_code(stFor_Test(node), label_body, label_after);
     append_instruction(label_eval, node);
-    append_child_instructions(stFor_Test(node), node);
+    if(stFor_Test(node)) {
+      generate_bool_expr_code(stFor_Test(node), label_body, label_after);
+      append_child_instructions(stFor_Test(node), node);
+    } else {
+      // No condition. Runs forever until stopped internally by a return.
+      instruction = create_jump_instruction(label_body->label);
+      append_instruction(instruction, node);
+    }
 
     // After the FOR
     append_instruction(label_after, node);

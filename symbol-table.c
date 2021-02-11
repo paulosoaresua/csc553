@@ -132,6 +132,9 @@ symtabnode *SymTabInsert(char *str, int sc) {
     return sptr;
 
   hval = hash(str);
+  while(SymTab[sc][hval]) {
+    hval = (hval + 1) % HASHTBLSZ;
+  }
 
   sptr = (symtabnode *)zalloc(sizeof(symtabnode));
   // Needed to copy the string to avoid having corrupted memory addresses for
