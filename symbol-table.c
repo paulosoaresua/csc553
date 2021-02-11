@@ -132,9 +132,6 @@ symtabnode *SymTabInsert(char *str, int sc) {
     return sptr;
 
   hval = hash(str);
-  while(SymTab[sc][hval]) {
-    hval = (hval + 1) % HASHTBLSZ;
-  }
 
   sptr = (symtabnode *)zalloc(sizeof(symtabnode));
   // Needed to copy the string to avoid having corrupted memory addresses for
@@ -308,7 +305,7 @@ symtabnode *create_temporary(int type) {
   return st_node;
 }
 
-static void save_string_node (symtabnode * str_node) {
+static void save_string_node(symtabnode *str_node) {
   if (string_list.tail) {
     string_list.tail->next = str_node;
     string_list.tail = str_node;
@@ -318,7 +315,7 @@ static void save_string_node (symtabnode * str_node) {
   }
 }
 
-symtabnode *create_constant_string(char* str) {
+symtabnode *create_constant_string(char *str) {
   symtabnode *str_node = (symtabnode *)zalloc(sizeof(symtabnode));
   str_node->type = t_String;
   str_node->scope = Global;
@@ -332,34 +329,30 @@ symtabnode *create_constant_string(char* str) {
   return str_node;
 }
 
-symtabnode *get_string_list_head() {
-  return string_list.head;
-}
-
+symtabnode *get_string_list_head() { return string_list.head; }
 
 int fill_local_allocations() {
   int locals_byte_size = 0;
 
   for (int i = 0; i < HASHTBLSZ; i++) {
     symtabnode *node = SymTab[Local][i];
-    if (node && !node->formal) {
-      int size = get_byte_size(node->type);
-      locals_byte_size += size;
-      node->fp_offset = -locals_byte_size;
-      node->byte_size = size;
+    while (node) {
+      if (!node->formal) {
+        int size = get_byte_size(node->type);
+        locals_byte_size += size;
+        node->fp_offset = -locals_byte_size;
+        node->byte_size = size;
+      }
+      node = node->next;
     }
   }
 
   return locals_byte_size;
 }
 
-symtabnode** get_symbol_table_entries(int scope) {
-  return SymTab[scope];
-}
+symtabnode **get_symbol_table_entries(int scope) { return SymTab[scope]; }
 
-int get_symbol_table_size() {
-  return HASHTBLSZ;
-}
+int get_symbol_table_size() { return HASHTBLSZ; }
 
 /*********************************************************************
  *                                                                   *
