@@ -20,7 +20,8 @@ extern int yylex();
 extern void yyerror();
 extern void printSyntaxTree(tnode *t, int n, int depth);
 extern void process_function_header(symtabnode *func_header, tnode *body);
-extern void generate_function_code(tnode *t, int lr_type);
+extern void generate_function_code(symtabnode *func_header, tnode *body, int
+lr_type);
 extern void process_allocations();
 extern void print_function(tnode *t);
 extern void collect_global(symtabnode* var);
@@ -101,7 +102,7 @@ prog
 
 	   /* Code generation */
 	   process_function_header(currFun, currfnbodyTree);
-       generate_function_code(currfnbodyTree, 1);
+       generate_function_code(currFun, currfnbodyTree, 1);
        process_allocations(currFun);
        print_function(currfnbodyTree);
 
