@@ -24,5 +24,6 @@
 #define t_Func   4
 #define t_None   5
 #define t_Error  6
+#define t_String 7
 
 #endif  /* _GLOBAL_H_ */

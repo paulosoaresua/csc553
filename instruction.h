@@ -9,7 +9,7 @@
 #include "global.h"
 #include "symbol-table.h"
 
-typedef enum OperationType {
+typedef enum OpType {
   OP_Assign_Int,
   OP_Assign_Char,
   OP_Assign_Str,
@@ -20,29 +20,46 @@ typedef enum OperationType {
   OP_Enter,
   OP_Return,
   OP_String,
-  OP_Global
-} OperationType;
+  OP_Global,
+  OP_UMinus,
+  OP_BinaryArithmetic,
+  OP_Label,
+  OP_If,
+  OP_Goto,
+} OPType;
+
+typedef enum InstructionType {
+  IT_Plus,
+  IT_BinaryMinus,
+  IT_Mult,
+  IT_Div,
+  IT_LE,
+  IT_EQ,
+  IT_LT,
+  IT_GT,
+  IT_NE,
+  IT_GE,
+} InstructionType;
 
 typedef struct instr_node {
-  OperationType op_type;
+  enum OpType op_type;
   symtabnode *dest;
-  char* label;
+  char *label;
+  enum InstructionType type;
 
   union {
     struct op_members {
-        symtabnode *src1;
-        symtabnode *src2;
+      symtabnode *src1;
+      symtabnode *src2;
     } op_members;
     int const_int;
-    char* const_char;
-    int type;
+    char *const_string;
   } val;
 
   struct instr_node *next;
 } inode;
 
 static int label_counter = 0;
-static int string_counter = 0;
 
 /**
  * Creates a label instruction for jumping purposes.
@@ -54,15 +71,29 @@ inode *create_label_instruction();
 /**
  * Creates a pointer to a 3-address instruction.
  *
- * @param op_type: type of the operation
+ * @param i_type: type of the operation
  * @param src1: first operand
  * @param src2: second operand
  * @param dest: destination to store the result of the operation
  *
  * @return new instruction
  */
-inode *create_instruction(OperationType op_type, symtabnode *src1,
+inode *create_instruction(enum OpType i_type, symtabnode *src1,
                           symtabnode *src2, symtabnode *dest);
+
+/**
+ * Creates an instruction for an expression.
+ *
+ * @param op_type: type of the operation
+ * @param src1: first operand
+ * @param src2: second operand
+ * @param dest: destination to store the result of the operation
+ * @param type: expression type
+ * @return
+ */
+inode *create_expr_instruction(enum OpType op_type, symtabnode *src1,
+                               symtabnode *src2, symtabnode *dest,
+                               enum InstructionType type);
 
 /**
  * Creates an instruction for a constant integer.
@@ -84,55 +115,39 @@ inode *create_const_int_instruction(int int_val, symtabnode *dest);
  */
 inode *create_const_char_instruction(int char_val, symtabnode *dest);
 
-/**
- * Creates an instruction for a constant string.
- *
- * @param str_label: label created for the string globally
- *
- * @return new instruction
- */
-inode *create_const_string_instruction(char* str_label);
-
-/**
- * Creates an instruction for a global string and adds it to the list of
- * strings.
- *
- * @param str: string
- *
- * @return new instruction
- */
-inode* create_string_instruction(char* str);
-
-/**
- * Append a string instruction to the list of all string instructions already
- * created.
- */
-void save_string_instruction(inode* instruction);
-
-/**
- * Return head of the list of string instructions.
- *
- * @return pointer to string instruction head
- */
-inode* get_string_instruction_head();
 
 /**
  * Creates an instruction for declaration of a global variable.
  *
- * @param id_name: name of the variable
- * @param type: type of the variable
+ * @param var: symbol table entry for the global variable
  *
  * @return new instruction
  */
-inode *create_global_decl_instruction(char* id_name, int type);
+inode *create_global_decl_instruction(symtabnode *var);
 
+/**
+ * Creates a conditional jump instruction to jump to a label.
+ *
+  * @param op_type: type of the operation
+ * @param src1: first operand
+ * @param src2: second operand
+ * @param label: label to jump to
+ * @param type: type of the comparison
+ * @return
+ */
+inode *create_cond_jump_instruction(enum OpType op_type, symtabnode *src1,
+                               symtabnode *src2, char *label,
+                               enum InstructionType type);
+
+/**
+ * Creates an unconditional jump instruction.
+ *
+ * @param label: label to jump to
+ * @return
+ */
+inode *create_jump_instruction(char *label);
 
 #define SRC1(x) (x)->val.op_members.src1
 #define SRC2(x) (x)->val.op_members.src2
-#define DEST(x) (x)->dest
-#define LABEL(x) (x)->val.label
-#define CINT(x) (x)->val.const_int
-#define CCHAR(x) (x)->val.const_char
-
 
 #endif // CSC553_INSTRUCTION_H
