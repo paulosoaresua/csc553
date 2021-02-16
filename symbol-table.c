@@ -16,8 +16,14 @@ extern bool is_extern;
 extern symtabnode *currFun;
 
 #define HASHTBLSZ 256
+#define t_1B 0 // 1 byte size type
+#define t_4B 1
 
 static symtabnode *SymTab[2][HASHTBLSZ];
+
+static symtabnode *free_char_temporaries;
+static symtabnode *free_int_temporaries;
+static symtabnode *free_addr_temporaries;
 
 static int hash(char *str) {
   int n = 0;
@@ -27,23 +33,6 @@ static int hash(char *str) {
   }
 
   return n % HASHTBLSZ;
-}
-
-static int get_byte_size(int type) {
-  int size = 0;
-
-  switch (type) {
-  case t_Int:
-  case t_Addr:
-    size = 4;
-    break;
-  case t_Char:
-  case t_Bool:
-    size = 1;
-    break;
-  }
-
-  return size;
 }
 
 static int string_counter = 0;
@@ -287,6 +276,10 @@ void CleanupFnInfo(void) {
   currFun = NULL;
   is_extern = false;
   CurrScope = Global;
+  free_char_temporaries = NULL;
+  free_int_temporaries = NULL;
+  free_addr_temporaries = NULL;
+  tmp_counter = 0;
 #if 0
   DumpSymTab();
 #endif
@@ -299,12 +292,77 @@ void CleanupFnInfo(void) {
  *                                                                   *
  *********************************************************************/
 
+static int get_byte_size_type(int type) {
+  if (type == t_Char || type == t_Bool) {
+    return t_1B;
+  }
+
+  return t_4B;
+}
+
+static symtabnode *get_free_temporary(int type){
+  symtabnode* tmp = NULL;
+
+  switch (type) {
+  case t_Char:
+    if(free_char_temporaries) {
+      tmp = free_char_temporaries;
+      free_char_temporaries = free_char_temporaries->next_free;
+      tmp->next_free = NULL;
+    }
+    break;
+  case t_Int:
+    if(free_int_temporaries) {
+      tmp = free_int_temporaries;
+      free_int_temporaries = free_int_temporaries->next_free;
+      tmp->next_free = NULL;
+    }
+    break;
+  case t_Addr:
+    if(free_addr_temporaries) {
+      tmp = free_addr_temporaries;
+      free_addr_temporaries = free_addr_temporaries->next_free;
+      tmp->next_free = NULL;
+    }
+    break;
+  default:
+    break;
+  }
+
+  return tmp;
+}
+
 symtabnode *create_temporary(int type) {
-  char name[16];
-  sprintf(name, "_tmp%d", tmp_counter++);
-  symtabnode *st_node = SymTabInsert(name, Local);
-  st_node->type = type;
-  return st_node;
+  symtabnode* tmp = get_free_temporary(type);
+
+  if(!tmp) {
+    char name[16];
+    sprintf(name, "_tmp%d", tmp_counter++);
+    tmp = SymTabInsert(name, Local);
+    tmp->type = type;
+    tmp->is_temporary = true;
+  }
+
+  return tmp;
+}
+
+void free_temporary(symtabnode* tmp) {
+  switch (tmp->type) {
+  case t_Char:
+    tmp->next_free = free_char_temporaries;
+    free_char_temporaries = tmp;
+    break;
+  case t_Int:
+    tmp->next_free = free_int_temporaries;
+    free_int_temporaries = tmp;
+    break;
+  case t_Addr:
+    tmp->next_free = free_addr_temporaries;
+    free_addr_temporaries = tmp;
+    break;
+  default:
+    break;
+  }
 }
 
 static void save_string_node(symtabnode *str_node) {
@@ -333,24 +391,25 @@ symtabnode *create_constant_string(char *str) {
 
 symtabnode *get_string_list_head() { return string_list.head; }
 
-static int allocate_by_type(int initial_offset, int type) {
+static int allocate(int initial_offset, int byte_size_type) {
   int curr_fp_offset = initial_offset;
 
   for (int i = 0; i < HASHTBLSZ; i++) {
     symtabnode *node = SymTab[Local][i];
     while (node) {
-      int node_type = node->type == t_Array ? node->elt_type : node->type;
-      if (!node->formal && node_type == type) {
-        int element_size;
-        int num_elements = 1;
-        if (node->type == 3) {
-          element_size = get_byte_size(node->elt_type);
-          num_elements = node->num_elts;
-        } else {
-          element_size = get_byte_size(node->type);
+      int node_type = (node->type == t_Array) ? node->elt_type : node->type;
+      int node_byte_size_type = get_byte_size_type(node_type);
+      if (!node->formal && node_byte_size_type == byte_size_type) {
+        int element_byte_size = 4;
+        if (node_byte_size_type == t_1B) {
+          element_byte_size = 1;
         }
 
-        node->byte_size = element_size * num_elements;
+        int num_elements = 1;
+        if (node->type == 3) {
+          num_elements = node->num_elts;
+        }
+        node->byte_size = element_byte_size * num_elements;
         curr_fp_offset += node->byte_size;
         node->fp_offset = -curr_fp_offset;
       }
@@ -362,13 +421,15 @@ static int allocate_by_type(int initial_offset, int type) {
 }
 
 int fill_local_allocations() {
-  int curr_fp_offset = allocate_by_type(0, t_Char);
-  curr_fp_offset = allocate_by_type(curr_fp_offset, t_Bool);
+  // Allocate space for 1-byte long types
+  int curr_fp_offset = allocate(0, t_1B);
+
+  // Align next position to a multiple of 4 and allocate space for integers
+  // and addresses.
   if (curr_fp_offset % 4 != 0) {
     curr_fp_offset = 4 * (curr_fp_offset / 4) + 4;
   }
-  curr_fp_offset = allocate_by_type(curr_fp_offset, t_Int);
-  curr_fp_offset = allocate_by_type(curr_fp_offset, t_Addr);
+  curr_fp_offset = allocate(curr_fp_offset, t_4B);
 
   // The final fp_offset indicates the total amount of bytes we need to
   // allocate for the local variables of a function.

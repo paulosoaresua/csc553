@@ -66,6 +66,12 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
                                        stAssg_Lhs(node)->place);
     }
     append_instruction(instruction, node);
+
+    // No longer needed after assigned to a variable
+    if (stAssg_Rhs(node)->place->is_temporary) {
+      free_temporary(stAssg_Rhs(node)->place);
+    }
+
     break;
 
   case Var:
@@ -79,9 +85,8 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
       fprintf(stderr, "A constant integer cannot be used as an l-value.\n");
       return;
     } else {
-      tmp = create_temporary(node->etype);
-      node->place = tmp;
-      instruction = create_const_int_instruction(node->val.iconst, tmp);
+      node->place = create_temporary(node->etype);
+      instruction = create_const_int_instruction(node->val.iconst, node->place);
       append_instruction(instruction, node);
     }
     break;
@@ -91,9 +96,9 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
       fprintf(stderr, "A constant char cannot be used as an l-value.\n");
       return;
     } else {
-      tmp = create_temporary(node->etype);
-      node->place = tmp;
-      instruction = create_const_char_instruction(node->val.iconst, tmp);
+      node->place = create_temporary(node->etype);
+      instruction =
+          create_const_char_instruction(node->val.iconst, node->place);
       append_instruction(instruction, node);
     }
     break;
@@ -104,8 +109,7 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
       return;
     } else {
       // No instruction needed
-      tmp = create_constant_string(stStringcon(node));
-      node->place = tmp;
+      node->place = create_constant_string(stStringcon(node));
     }
     break;
 
@@ -121,9 +125,17 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
       if (stList_Head(param)->place) {
         instruction =
             create_instruction(OP_Param, stList_Head(param)->place, NULL, NULL);
+
+        if (stList_Head(param)->place->is_temporary) {
+          free_temporary(stList_Head(param)->place);
+        }
       } else {
         instruction =
             create_instruction(OP_Param, stList_Head(param)->loc, NULL, NULL);
+
+        if (stList_Head(param)->loc->is_temporary) {
+          free_temporary(stList_Head(param)->loc);
+        }
       }
       // Actuals from the right to the left
       instruction->next = params_instructions;
@@ -136,9 +148,8 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
     append_instruction(instruction, node);
 
     if (function_ptr->ret_type != t_None) {
-      tmp = create_temporary(function_ptr->ret_type);
-      node->place = tmp;
-      instruction = create_instruction(OP_Retrieve, NULL, NULL, tmp);
+      node->place = create_temporary(function_ptr->ret_type);
+      instruction = create_instruction(OP_Retrieve, NULL, NULL, node->place);
       append_instruction(instruction, node);
     }
     break;
@@ -166,11 +177,14 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
   case UnaryMinus:
     generate_function_code(func_header, stUnop_Op(node), R_VALUE);
     append_child_instructions(stUnop_Op(node), node);
-    tmp = create_temporary(node->etype);
-    node->place = tmp;
-    instruction =
-        create_instruction(OP_UMinus, stUnop_Op(node)->place, NULL, tmp);
+    node->place = create_temporary(node->etype);
+    instruction = create_instruction(OP_UMinus, stUnop_Op(node)->place, NULL,
+                                     node->place);
     append_instruction(instruction, node);
+
+    if(stUnop_Op(node)->place->is_temporary) {
+      free_temporary(stUnop_Op(node)->place);
+    }
     break;
 
   case Plus:
@@ -295,6 +309,11 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
                            R_VALUE);
     append_child_instructions(stArraySubscript_Subscript(node), node);
 
+
+    if(stArraySubscript_Subscript(node)->place->is_temporary) {
+      free_temporary(stArraySubscript_Subscript(node)->place);
+    }
+
     // This stores the memory address of the first position of the array
     symtabnode *array_node = stArraySubscript_Array(node);
 
@@ -327,7 +346,7 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
 static void generate_function_args_code(symtabnode *func_header,
                                         tnode *call_node) {
   symtabnode *formal = stFunCall_Fun(call_node)->formals;
-  tnode* arg_node = stFunCall_Args(call_node);
+  tnode *arg_node = stFunCall_Args(call_node);
   for (tnode *arg = arg_node; arg != NULL; arg = stList_Rest(arg)) {
     if (formal->type == t_Array) {
       generate_function_code(func_header, stList_Head(arg), L_VALUE);
@@ -345,11 +364,18 @@ static void generate_binary_expr_code(symtabnode *func_header, tnode *node,
   append_child_instructions(stBinop_Op1(node), node);
   generate_function_code(func_header, stBinop_Op2(node), lr_type);
   append_child_instructions(stBinop_Op2(node), node);
-  symtabnode *tmp = create_temporary(node->etype);
-  node->place = tmp;
+  node->place = create_temporary(node->etype);
   inode *instruction =
       create_expr_instruction(OP_BinaryArithmetic, stBinop_Op1(node)->place,
-                              stBinop_Op2(node)->place, tmp, type);
+                              stBinop_Op2(node)->place, node->place, type);
+
+  if(stBinop_Op1(node)->place->is_temporary) {
+    free_temporary(stBinop_Op1(node)->place);
+  }
+  if(stBinop_Op2(node)->place->is_temporary) {
+    free_temporary(stBinop_Op2(node)->place);
+  }
+
   append_instruction(instruction, node);
 }
 

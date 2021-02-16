@@ -35,18 +35,29 @@ void print_function(tnode *node) {
         printf(".data \n");
       }
 
+      int byte_size;
+
       switch (SRC1(curr_instruction)->type) {
       case t_Int:
-        printf("_%s:.space 4 \n", SRC1(curr_instruction)->name);
+        byte_size = 4;
         break;
       case t_Char:
-        printf("_%s:.space 1 \n", SRC1(curr_instruction)->name);
-        printf(".align 2 \n");
+        byte_size = 1;
         break;
+      case t_Array: {
+        int num_elements = SRC1(curr_instruction)->num_elts;
+        if (SRC1(curr_instruction)->elt_type == t_Char) {
+          byte_size = num_elements;
+        } else {
+          byte_size = 4 * num_elements;
+        }
+        break;
+      }
       default:
         break;
       }
 
+      printf("_%s:.space %d \n", SRC1(curr_instruction)->name, byte_size);
       break;
     }
     case OP_Enter: {
@@ -158,6 +169,8 @@ void print_function(tnode *node) {
     case OP_BinaryArithmetic: {
       printf("\n");
       printf("  # OP_BinaryArithmetic    \n");
+      printf("  #%s, %s \n", SRC1(curr_instruction)->name,
+             SRC2(curr_instruction)->name);
       load_to_register(SRC1(curr_instruction), "$t0",
                        SRC1(curr_instruction)->type);
       load_to_register(SRC2(curr_instruction), "$t1",
@@ -196,7 +209,7 @@ void print_function(tnode *node) {
       printf("  # OP_Index_Array \n");
       load_to_register(SRC1(curr_instruction), "$t0", t_Int);
       // Load address of the first position of the array into $t1
-      if(SRC2(curr_instruction)->formal) {
+      if (SRC2(curr_instruction)->formal) {
         // If it's a formal, the address of the first position of the array
         // will be stored in the stack, therefore we read the content instead of
         // the address of the formal in the stack;

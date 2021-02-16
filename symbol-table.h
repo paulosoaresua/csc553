@@ -25,6 +25,8 @@ typedef struct stblnode {
   int fp_offset;           // Memory location as an offset of the frame pointer
   int num_formals;         // Number of formal parameters
   char* const_str;        // Constant string
+  bool is_temporary;
+  struct stblnode *next_free; // List of free temporaries
   struct stblnode *next;
 } symtabnode;
 
@@ -73,6 +75,12 @@ static int tmp_counter = 0;
  * @return pointer to the newly created entry
  */
 symtabnode *create_temporary(int type);
+
+/**
+ * Places the temporary in the list of available temporaries (for reuse) of
+ * its type.
+ */
+void free_temporary(symtabnode* tmp);
 
 /**
  * Creates a symbol table node to contain a string constant. This node is not
