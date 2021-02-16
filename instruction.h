@@ -26,6 +26,8 @@ typedef enum OpType {
   OP_Label,
   OP_If,
   OP_Goto,
+  OP_Index_Array,
+  OP_Deref
 } OPType;
 
 typedef enum InstructionType {

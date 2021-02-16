@@ -34,10 +34,12 @@ static int get_byte_size(int type) {
 
   switch (type) {
   case t_Int:
+  case t_Addr:
     size = 4;
     break;
   case t_Char:
-    size = 4;
+  case t_Bool:
+    size = 1;
     break;
   }
 
@@ -231,8 +233,8 @@ symtabnode *SymTabRecordFunInfo(bool isProto) {
       } else {
         stptr->type = ltmp->type;
         stptr->elt_type = t_None;
-        stptr->fp_offset = 4 * (++i + 1);
       }
+      stptr->fp_offset = 4 * (++i + 1);
       /*
        * Now create a record for the list of formals, and copy over
        * info from stptr.
@@ -331,23 +333,46 @@ symtabnode *create_constant_string(char *str) {
 
 symtabnode *get_string_list_head() { return string_list.head; }
 
-int fill_local_allocations() {
-  int locals_byte_size = 0;
+static int allocate_by_type(int initial_offset, int type) {
+  int curr_fp_offset = initial_offset;
 
   for (int i = 0; i < HASHTBLSZ; i++) {
     symtabnode *node = SymTab[Local][i];
     while (node) {
-      if (!node->formal) {
-        int size = get_byte_size(node->type);
-        locals_byte_size += size;
-        node->fp_offset = -locals_byte_size;
-        node->byte_size = size;
+      int node_type = node->type == t_Array ? node->elt_type : node->type;
+      if (!node->formal && node_type == type) {
+        int element_size;
+        int num_elements = 1;
+        if (node->type == 3) {
+          element_size = get_byte_size(node->elt_type);
+          num_elements = node->num_elts;
+        } else {
+          element_size = get_byte_size(node->type);
+        }
+
+        node->byte_size = element_size * num_elements;
+        curr_fp_offset += node->byte_size;
+        node->fp_offset = -curr_fp_offset;
       }
       node = node->next;
     }
   }
 
-  return locals_byte_size;
+  return curr_fp_offset;
+}
+
+int fill_local_allocations() {
+  int curr_fp_offset = allocate_by_type(0, t_Char);
+  curr_fp_offset = allocate_by_type(curr_fp_offset, t_Bool);
+  if (curr_fp_offset % 4 != 0) {
+    curr_fp_offset = 4 * (curr_fp_offset / 4) + 4;
+  }
+  curr_fp_offset = allocate_by_type(curr_fp_offset, t_Int);
+  curr_fp_offset = allocate_by_type(curr_fp_offset, t_Addr);
+
+  // The final fp_offset indicates the total amount of bytes we need to
+  // allocate for the local variables of a function.
+  return curr_fp_offset;
 }
 
 symtabnode **get_symbol_table_entries(int scope) { return SymTab[scope]; }

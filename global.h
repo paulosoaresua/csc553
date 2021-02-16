@@ -25,5 +25,7 @@
 #define t_None   5
 #define t_Error  6
 #define t_String 7
+#define t_Addr   8
+#define t_Word   9
 
 #endif  /* _GLOBAL_H_ */
