@@ -164,8 +164,11 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
     if (stReturn(node)) {
       generate_function_code(func_header, stReturn(node), R_VALUE);
       append_child_instructions(stReturn(node), node);
-      node->place = stReturn(node)->place;
-      node->place->type = func_header->ret_type;
+
+      node->place = create_temporary(func_header->ret_type);
+      instruction = create_instruction(OP_Assign, stReturn(node)->place,
+          NULL, node->place);
+      append_instruction(instruction, node);
     }
     instruction = create_instruction(OP_Return, NULL, NULL, node->place);
     append_instruction(instruction, node);
@@ -305,7 +308,6 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
     generate_function_code(func_header, stArraySubscript_Subscript(node),
                            R_VALUE);
     append_child_instructions(stArraySubscript_Subscript(node), node);
-
 
     if(stArraySubscript_Subscript(node)->place->is_temporary) {
       free_temporary(stArraySubscript_Subscript(node)->place);
