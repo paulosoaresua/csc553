@@ -58,6 +58,9 @@ void print_function(tnode *node) {
       }
 
       printf("_%s:.space %d \n", SRC1(curr_instruction)->name, byte_size);
+      if (byte_size % 4 != 0) {
+        printf(".align 2 \n");
+      }
       break;
     }
     case OP_Enter: {

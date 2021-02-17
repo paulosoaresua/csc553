@@ -148,7 +148,9 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
     append_instruction(instruction, node);
 
     if (function_ptr->ret_type != t_None) {
-      node->place = create_temporary(function_ptr->ret_type);
+      // $v0 will be saved in a dedicated memory cell (using t_Int here as a
+      // proxy to t_Word)
+      node->place = create_temporary(t_Int);
       instruction = create_instruction(OP_Retrieve, NULL, NULL, node->place);
       append_instruction(instruction, node);
     }
