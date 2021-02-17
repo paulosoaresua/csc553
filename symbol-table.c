@@ -333,7 +333,7 @@ static symtabnode *get_free_temporary(int type){
 }
 
 symtabnode *create_temporary(int type) {
-  symtabnode* tmp = get_free_temporary(type);
+  symtabnode* tmp = NULL;//get_free_temporary(type);
 
   if(!tmp) {
     char name[16];
