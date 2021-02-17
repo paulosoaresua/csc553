@@ -91,14 +91,14 @@ void print_function(tnode *node) {
         printf("  lui $t0, %d \n", high);
         printf("  ori $t0, %d \n", low);
       }
-      printf("  sw $t0, %d($fp) \n", curr_instruction->dest->fp_offset);
+      store_at_memory(curr_instruction->dest, "$t0");
       break;
 
     case OP_Assign_Char:
       printf("\n");
       printf("  # OP_Assign_Char \n");
       printf("  li $t0, %d       \n", curr_instruction->val.const_int);
-      printf("  sb $t0, %d($fp) \n", curr_instruction->dest->fp_offset);
+      store_at_memory(curr_instruction->dest, "$t0");
       break;
 
     case OP_Assign:

@@ -85,7 +85,7 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
       fprintf(stderr, "A constant integer cannot be used as an l-value.\n");
       return;
     } else {
-      node->place = create_temporary(node->etype);
+      node->place = create_temporary(t_Int);
       instruction = create_const_int_instruction(node->val.iconst, node->place);
       append_instruction(instruction, node);
     }
@@ -96,7 +96,7 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
       fprintf(stderr, "A constant char cannot be used as an l-value.\n");
       return;
     } else {
-      node->place = create_temporary(node->etype);
+      node->place = create_temporary(t_Char);
       instruction =
           create_const_char_instruction(node->val.iconst, node->place);
       append_instruction(instruction, node);
@@ -150,7 +150,8 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
     if (function_ptr->ret_type != t_None) {
       // $v0 will be saved in a dedicated memory cell (using t_Int here as a
       // proxy to t_Word)
-      node->place = create_temporary(t_Int);
+      node->place = create_temporary(function_ptr->ret_type);
+//      node->place = create_temporary(t_Int);
       instruction = create_instruction(OP_Retrieve, NULL, NULL, node->place);
       append_instruction(instruction, node);
     }
