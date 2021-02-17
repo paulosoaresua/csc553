@@ -398,7 +398,7 @@ static int allocate(int initial_offset, int byte_size_type) {
     symtabnode *node = SymTab[Local][i];
     while (node) {
       int node_type = (node->type == t_Array) ? node->elt_type : node->type;
-      int node_byte_size_type = get_byte_size_type(node_type);
+      int node_byte_size_type = t_4B;//get_byte_size_type(node_type);
       if (!node->formal && node_byte_size_type == byte_size_type) {
         int element_byte_size = 4;
         if (node_byte_size_type == t_1B) {
@@ -422,15 +422,15 @@ static int allocate(int initial_offset, int byte_size_type) {
 
 int fill_local_allocations() {
   // Allocate space for 1-byte long types
-  int curr_fp_offset = allocate(0, t_1B);
-
-  // Align next position to a multiple of 4 and allocate space for integers
-  // and addresses.
-  if (curr_fp_offset % 4 != 0) {
-    curr_fp_offset = 4 * (curr_fp_offset / 4) + 4;
-  }
-  curr_fp_offset = allocate(curr_fp_offset, t_4B);
-//  int curr_fp_offset = allocate(0, t_4B);
+//  int curr_fp_offset = allocate(0, t_1B);
+//
+//  // Align next position to a multiple of 4 and allocate space for integers
+//  // and addresses.
+//  if (curr_fp_offset % 4 != 0) {
+//    curr_fp_offset = 4 * (curr_fp_offset / 4) + 4;
+//  }
+//  curr_fp_offset = allocate(curr_fp_offset, t_4B);
+  int curr_fp_offset = allocate(0, t_4B);
 
   // The final fp_offset indicates the total amount of bytes we need to
   // allocate for the local variables of a function.
