@@ -110,13 +110,13 @@ void print_function(tnode *node) {
         // value to be stored in the array location is determined by the type
         // of the elements in the array.
         load_to_register(SRC1(curr_instruction), "$t0",
-                         curr_instruction->dest->elt_type);
+                         SRC1(curr_instruction)->type);
         load_to_register(curr_instruction->dest, "$t1", t_Word);
         char mem_op_type = get_mem_op_type(curr_instruction->dest->elt_type);
         printf("  s%c $t0, 0($t1) \n", mem_op_type);
       } else {
         load_to_register(SRC1(curr_instruction), "$t0",
-                         curr_instruction->dest->type);
+                         SRC1(curr_instruction)->type);
         store_at_memory(curr_instruction->dest, "$t0");
       }
       break;
