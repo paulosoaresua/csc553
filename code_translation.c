@@ -172,8 +172,6 @@ void print_function(tnode *node) {
     case OP_BinaryArithmetic: {
       printf("\n");
       printf("  # OP_BinaryArithmetic    \n");
-      printf("  #%s, %s \n", SRC1(curr_instruction)->name,
-             SRC2(curr_instruction)->name);
       load_to_register(SRC1(curr_instruction), "$t0",
                        SRC1(curr_instruction)->type);
       load_to_register(SRC2(curr_instruction), "$t1",
@@ -210,7 +208,8 @@ void print_function(tnode *node) {
     case OP_Index_Array:
       printf("\n");
       printf("  # OP_Index_Array \n");
-      load_to_register(SRC1(curr_instruction), "$t0", t_Int);
+      load_to_register(SRC1(curr_instruction), "$t0",
+                       SRC1(curr_instruction)->type);
       // Load address of the first position of the array into $t1
       if (SRC2(curr_instruction)->formal) {
         // If it's a formal, the address of the first position of the array

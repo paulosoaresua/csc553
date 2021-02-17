@@ -104,13 +104,7 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
     break;
 
   case Stringcon:
-    if (lr_type == L_VALUE) {
-      fprintf(stderr, "A constant string cannot be used as an l-value.\n");
-      return;
-    } else {
-      // No instruction needed
-      node->place = create_constant_string(stStringcon(node));
-    }
+    node->place = create_constant_string(stStringcon(node));
     break;
 
   case FunCall: {
