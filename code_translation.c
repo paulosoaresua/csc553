@@ -124,8 +124,14 @@ void print_function(tnode *node) {
     case OP_Param: {
       printf("\n");
       printf("  # OP_Param       \n");
-      load_to_register(SRC1(curr_instruction), "$t0",
-                       SRC1(curr_instruction)->type);
+      if (SRC1(curr_instruction)->formal) {
+        // When a function passes one of its formal to another, just copy the
+        // whole word
+        load_to_register(SRC1(curr_instruction), "$t0", t_Word);
+      } else {
+        load_to_register(SRC1(curr_instruction), "$t0",
+                         SRC1(curr_instruction)->type);
+      }
       printf("  la $sp, -4($sp)  \n");
       printf("  sw $t0, 0($sp)   \n");
 
