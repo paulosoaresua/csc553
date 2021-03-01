@@ -198,6 +198,7 @@ id_decl
       stptr->formal = false;
       stptr->elt_type = CurrType;
       stptr->num_elts = $3;
+      collect_global(stptr);
     }
   }
   ;
