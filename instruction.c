@@ -10,7 +10,6 @@ inode *create_label_instruction() {
   instruction->label = malloc(16 * sizeof(char));
   sprintf(instruction->label, "L%d", label_counter++);
   instruction->op_type = OP_Label;
-  instruction->dead = false;
 
   return instruction;
 }
@@ -23,7 +22,6 @@ inode *create_instruction(enum OpType i_type, symtabnode *src1,
   instruction->val.op_members.src1 = src1;
   instruction->val.op_members.src2 = src2;
   instruction->dest = dest;
-  instruction->dead = false;
 
   return instruction;
 }
@@ -42,7 +40,6 @@ inode *create_const_int_instruction(int int_val, symtabnode *dest) {
   instruction->op_type = OP_Assign_Int;
   instruction->val.const_int = int_val;
   instruction->dest = dest;
-  instruction->dead = false;
 
   return instruction;
 }
@@ -52,7 +49,6 @@ inode *create_const_char_instruction(int char_val, symtabnode *dest) {
   instruction->op_type = OP_Assign_Char;
   instruction->val.const_int = char_val;
   instruction->dest = dest;
-  instruction->dead = false;
 
   return instruction;
 }
@@ -61,7 +57,6 @@ inode *create_global_decl_instruction(symtabnode *var) {
   inode *instruction = zalloc(sizeof(*instruction));
   instruction->op_type = OP_Global;
   instruction->val.op_members.src1 = var;
-  instruction->dead = false;
 
   return instruction;
 }
@@ -149,6 +144,12 @@ void print_instruction(inode *instruction) {
   }
 }
 
+/*********************************************************************
+ *                                                                   *
+ *                           for optimization                        *
+ *                                                                   *
+ *********************************************************************/
+
 void invert_boolean_operator(inode* instruction) {
   switch (instruction->type) {
   case IT_EQ:
@@ -182,4 +183,29 @@ void fill_backward_connections(inode* instructions_head) {
     last_node = curr_instruction;
     curr_instruction = curr_instruction->next;
   }
+}
+
+bnode *create_block(inode *leader, bool preserve_old) {
+  if(leader->block) {
+    return leader->block;
+  }
+
+  bnode *block = zalloc(sizeof(bnode));
+  block->first_instruction = leader;
+
+  return block;
+}
+
+void add_child_block(bnode *child, bnode *parent) {
+  // Add child to the parent's child list
+  blist_node *child_node = zalloc(sizeof(blist_node));
+  child_node->block = child;
+  child_node->next = parent->children;
+  parent->children = child_node;
+
+  // Add parent to the child's parent list
+  blist_node *parent_node = zalloc(sizeof(blist_node));
+  parent_node->block = parent;
+  parent_node->next = child->parents;
+  child->parents = parent_node;
 }

@@ -41,12 +41,25 @@ typedef enum InstructionType {
   IT_GE,
 } InstructionType;
 
-typedef struct instr_node {
+typedef struct BlockListNode {
+  struct Block* block;
+  struct BlockListNode* next;
+} blist_node;
+
+typedef struct Block {
+  struct Instruction* first_instruction;
+  struct Instruction* last_instruction;
+
+  blist_node* children;
+  blist_node* parents;
+} bnode;
+
+typedef struct Instruction {
   enum OpType op_type;
   symtabnode *dest;
   char *label;
   enum InstructionType type;
-  struct instr_node* jump_to;
+  struct Instruction* jump_to;
 
   union {
     struct op_members {
@@ -57,11 +70,11 @@ typedef struct instr_node {
     char *const_string;
   } val;
 
-  struct instr_node *previous;
-  struct instr_node *next;
+  struct Instruction *previous;
+  struct Instruction *next;
 
   // For code optimization
-  bool dead;
+  bnode* block;
 } inode;
 
 static int label_counter = 0;
@@ -181,5 +194,25 @@ void fill_backward_connections(inode* instructions_head);
  * @param instruction: instruction
  */
 void invert_boolean_operator(inode* instruction);
+
+/**
+ * Creates a new block with a leader instruction.
+ *
+ * @param leader: first instruction within the block
+ * @param preserve_old: if true, it only creates a new block if the
+ * instruction is not associated with another block.
+ *
+ * @return block
+ */
+bnode *create_block(inode *leader, bool preserve_old);
+
+/**
+ * Adds a block as a child of another.
+ *
+ * @param child: child block
+ * @param parent: parent block
+ *
+ */
+void add_child_block(bnode *child, bnode *parent);
 
 #endif // CSC553_INSTRUCTION_H

@@ -4,48 +4,47 @@
  */
 
 #include "code_optimization.h"
-#include "instruction.h"
 
 bool local_enabled = false;
 bool global_enabled = false;
 
-static void optimize_locally(tnode *node);
-static void optimize_globally(tnode *node);
-static void run_peephole_optimization(tnode *node);
+static void optimize_locally(tnode *function_body);
+static void optimize_globally(tnode *function_body);
+static void run_peephole_optimization(tnode *function_body);
 static void remove_instruction(tnode *node, inode *instruction);
 
 void enable_local_optimization() { local_enabled = true; }
 
 void enable_global_optimization() { global_enabled = true; }
 
-void optimize_instructions(tnode *node) {
+void optimize_instructions(tnode *function_body) {
   if (local_enabled || global_enabled) {
-    fill_backward_connections(node->code_head);
-    optimize_locally(node);
-    optimize_globally(node);
+    fill_backward_connections(function_body->code_head);
+    build_control_flow_graph(function_body);
+    optimize_locally(function_body);
+    optimize_globally(function_body);
   }
 }
 
-static void optimize_locally(tnode *node) {
+static void optimize_locally(tnode *function_body) {
   if (local_enabled) {
-    run_peephole_optimization(node);
-    run_peephole_optimization(node);
+//    run_peephole_optimization(node);
   }
 }
 
-static void optimize_globally(tnode *node) {
+static void optimize_globally(tnode *function_body) {
   if (global_enabled) {
   }
 }
 
-static void run_peephole_optimization(tnode *node) {
-  inode *curr_instruction = node->code_head;
+static void run_peephole_optimization(tnode *function_body) {
+  inode *curr_instruction = function_body->code_head;
 
   while (curr_instruction) {
     switch (curr_instruction->op_type) {
     case OP_Goto:
       if (curr_instruction->jump_to == curr_instruction->next) {
-        remove_instruction(node, curr_instruction);
+        remove_instruction(function_body, curr_instruction);
       }
       break;
     case OP_If:
@@ -56,7 +55,7 @@ static void run_peephole_optimization(tnode *node) {
 
         invert_boolean_operator(curr_instruction);
         curr_instruction->jump_to = curr_instruction->next->jump_to;
-        remove_instruction(node, curr_instruction->next);
+        remove_instruction(function_body, curr_instruction->next);
       }
       break;
     case OP_Assign_Int:
@@ -68,7 +67,7 @@ static void run_peephole_optimization(tnode *node) {
           curr_instruction->next->op_type = OP_Assign_Int;
           curr_instruction->next->val.const_int =
               curr_instruction->val.const_int;
-          remove_instruction(node, curr_instruction);
+          remove_instruction(function_body, curr_instruction);
         }
       }
       break;
@@ -80,15 +79,24 @@ static void run_peephole_optimization(tnode *node) {
   }
 }
 
-static void remove_instruction(tnode *node, inode *instruction) {
+static void remove_instruction(tnode *function_body, inode *instruction) {
   if (instruction) {
-    if (instruction == node->code_head) {
-      node->code_head = instruction->next;
+    if (instruction == function_body->code_head) {
+      function_body->code_head = instruction->next;
     } else {
       instruction->previous->next = instruction->next;
       if (instruction->next) {
         instruction->next->previous = instruction->previous;
       }
+    }
+
+    // Adjust block boundaries
+    if (instruction->block && instruction->block->first_instruction == instruction) {
+      instruction->block->first_instruction = instruction->next;
+    }
+
+    if (instruction->block && instruction->block->last_instruction == instruction) {
+      instruction->block->last_instruction = instruction->previous;
     }
 
     instruction->previous = NULL;

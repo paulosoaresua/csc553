@@ -1,7 +1,29 @@
-///*
-// * Author: Paulo Soares.
-// * CSC 553 (Spring 2021)
-// */
+/*
+ * Author: Paulo Soares.
+ * CSC 553 (Spring 2021)
+ */
+
+#ifndef CSC553_CONTROL_FLOW_H
+#define CSC553_CONTROL_FLOW_H
+
+#include "instruction.h"
+#include "protos.h"
+#include "syntax-tree.h"
+
+/**
+ * Builds a control flow graph for the set of instructions within a function
+ * body.
+ *
+ * @param function_body: first node of a function body
+ */
+void build_control_flow_graph(tnode* function_body);
+
+#endif
+
+
+
+
+
 //
 //#ifndef CSC553_CODE_TRANSLATION_H
 //#define CSC553_CODE_TRANSLATION_H
