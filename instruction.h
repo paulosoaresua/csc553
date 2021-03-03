@@ -12,14 +12,12 @@
 typedef enum OpType {
   OP_Assign_Int,
   OP_Assign_Char,
-  OP_Assign_Str,
   OP_Assign,
   OP_Call,
   OP_Param,
   OP_Retrieve,
   OP_Enter,
   OP_Return,
-  OP_String,
   OP_Global,
   OP_UMinus,
   OP_BinaryArithmetic,
@@ -27,7 +25,7 @@ typedef enum OpType {
   OP_If,
   OP_Goto,
   OP_Index_Array,
-  OP_Deref
+  OP_Deref,
 } OPType;
 
 typedef enum InstructionType {
@@ -48,6 +46,7 @@ typedef struct instr_node {
   symtabnode *dest;
   char *label;
   enum InstructionType type;
+  struct instr_node* jump_to;
 
   union {
     struct op_members {
@@ -58,7 +57,11 @@ typedef struct instr_node {
     char *const_string;
   } val;
 
+  struct instr_node *previous;
   struct instr_node *next;
+
+  // For code optimization
+  bool dead;
 } inode;
 
 static int label_counter = 0;
@@ -133,23 +136,50 @@ inode *create_global_decl_instruction(symtabnode *var);
   * @param op_type: type of the operation
  * @param src1: first operand
  * @param src2: second operand
- * @param label: label to jump to
+ * @param destiny_instruction: instruction to jump to
  * @param type: type of the comparison
  * @return
  */
 inode *create_cond_jump_instruction(enum OpType op_type, symtabnode *src1,
-                               symtabnode *src2, char *label,
+                               symtabnode *src2, inode* destiny_instruction,
                                enum InstructionType type);
 
 /**
  * Creates an unconditional jump instruction.
  *
- * @param label: label to jump to
+ * @param destiny_instruction: instruction to jump to
  * @return
  */
-inode *create_jump_instruction(char *label);
+inode *create_jump_instruction(inode* destiny_instruction);
+
+/**
+ * Print 3-addr code instruction
+ *
+ * @param instruction: instruction
+ */
+void print_instruction(inode* instruction);
 
 #define SRC1(x) (x)->val.op_members.src1
 #define SRC2(x) (x)->val.op_members.src2
+
+/*********************************************************************
+ *                                                                   *
+ *                           for optimization                        *
+ *                                                                   *
+ *********************************************************************/
+
+/**
+ * Connects a subsequent instruction to its predecessor.
+ *
+ * @param instructions_head: first of a list of instructions.
+ */
+void fill_backward_connections(inode* instructions_head);
+
+/**
+ * Inverts boolean operator of a boolean expression instruction.
+ *
+ * @param instruction: instruction
+ */
+void invert_boolean_operator(inode* instruction);
 
 #endif // CSC553_INSTRUCTION_H

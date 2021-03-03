@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -g #-DDEBUG
+CFLAGS = -g
 DEST = compile
 
 HFILES = error.h  global.h  protos.h symbol-table.h  syntax-tree.h

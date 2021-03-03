@@ -23,7 +23,8 @@ extern void process_function_header(symtabnode *func_header, tnode *body);
 extern void generate_function_code(symtabnode *func_header, tnode *body, int
 lr_type);
 extern void process_allocations();
-extern void print_function(tnode *t);
+extern void optimize_instructions(tnode *t);
+extern void print_instructions(tnode *t);
 extern void collect_global(symtabnode* var);
 
   /*
@@ -104,7 +105,8 @@ prog
 	   process_function_header(currFun, currfnbodyTree);
        generate_function_code(currFun, currfnbodyTree, 1);
        process_allocations(currFun);
-       print_function(currfnbodyTree);
+       optimize_instructions(currfnbodyTree);
+       print_instructions(currfnbodyTree);
 
       CleanupFnInfo(); 
     }
