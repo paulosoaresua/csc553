@@ -6,7 +6,7 @@
 #ifndef CSC553_INSTRUCTION_H
 #define CSC553_INSTRUCTION_H
 
-#include "global.h"
+#include "block.h"
 #include "symbol-table.h"
 
 typedef enum OpType {
@@ -41,25 +41,12 @@ typedef enum InstructionType {
   IT_GE,
 } InstructionType;
 
-typedef struct BlockListNode {
-  struct Block* block;
-  struct BlockListNode* next;
-} blist_node;
-
-typedef struct Block {
-  struct Instruction* first_instruction;
-  struct Instruction* last_instruction;
-
-  blist_node* children;
-  blist_node* parents;
-} bnode;
-
 typedef struct Instruction {
   enum OpType op_type;
   symtabnode *dest;
   char *label;
   enum InstructionType type;
-  struct Instruction* jump_to;
+  struct Instruction *jump_to;
 
   union {
     struct op_members {
@@ -67,24 +54,20 @@ typedef struct Instruction {
       symtabnode *src2;
     } op_members;
     int const_int;
-    char *const_string;
   } val;
 
   struct Instruction *previous;
   struct Instruction *next;
 
   // For code optimization
-  bnode* block;
+  int order;
+  int definition_id; // Unique ID for each instruction that assigns to a
+  // variable
+  bnode *block;
+
 } inode;
 
 static int label_counter = 0;
-
-/**
- * Creates a label instruction for jumping purposes.
- *
- * @return new label instruction
- */
-inode *create_label_instruction();
 
 /**
  * Creates a pointer to a 3-address instruction.
@@ -98,6 +81,13 @@ inode *create_label_instruction();
  */
 inode *create_instruction(enum OpType i_type, symtabnode *src1,
                           symtabnode *src2, symtabnode *dest);
+
+/**
+ * Creates a label instruction for jumping purposes.
+ *
+ * @return new label instruction
+ */
+inode *create_label_instruction();
 
 /**
  * Creates an instruction for an expression.
@@ -133,7 +123,6 @@ inode *create_const_int_instruction(int int_val, symtabnode *dest);
  */
 inode *create_const_char_instruction(int char_val, symtabnode *dest);
 
-
 /**
  * Creates an instruction for declaration of a global variable.
  *
@@ -146,16 +135,16 @@ inode *create_global_decl_instruction(symtabnode *var);
 /**
  * Creates a conditional jump instruction to jump to a label.
  *
-  * @param op_type: type of the operation
  * @param src1: first operand
  * @param src2: second operand
  * @param destiny_instruction: instruction to jump to
  * @param type: type of the comparison
  * @return
  */
-inode *create_cond_jump_instruction(enum OpType op_type, symtabnode *src1,
-                               symtabnode *src2, inode* destiny_instruction,
-                               enum InstructionType type);
+inode *create_cond_jump_instruction(symtabnode *src1,
+                                    symtabnode *src2,
+                                    inode *destiny_instruction,
+                                    enum InstructionType type);
 
 /**
  * Creates an unconditional jump instruction.
@@ -163,14 +152,14 @@ inode *create_cond_jump_instruction(enum OpType op_type, symtabnode *src1,
  * @param destiny_instruction: instruction to jump to
  * @return
  */
-inode *create_jump_instruction(inode* destiny_instruction);
+inode *create_jump_instruction(inode *destiny_instruction);
 
 /**
  * Print 3-addr code instruction
  *
  * @param instruction: instruction
  */
-void print_instruction(inode* instruction);
+void print_instruction(inode *instruction);
 
 #define SRC1(x) (x)->val.op_members.src1
 #define SRC2(x) (x)->val.op_members.src2
@@ -186,33 +175,21 @@ void print_instruction(inode* instruction);
  *
  * @param instructions_head: first of a list of instructions.
  */
-void fill_backward_connections(inode* instructions_head);
+void fill_backward_connections(inode *instructions_head);
 
 /**
  * Inverts boolean operator of a boolean expression instruction.
  *
  * @param instruction: instruction
  */
-void invert_boolean_operator(inode* instruction);
+void invert_boolean_operator(inode *instruction);
 
 /**
- * Creates a new block with a leader instruction.
+ * Checks whether the instruction redefines a variable.
  *
- * @param leader: first instruction within the block
- * @param preserve_old: if true, it only creates a new block if the
- * instruction is not associated with another block.
- *
- * @return block
+ * @param instruction: instruction
+ * @return
  */
-bnode *create_block(inode *leader, bool preserve_old);
-
-/**
- * Adds a block as a child of another.
- *
- * @param child: child block
- * @param parent: parent block
- *
- */
-void add_child_block(bnode *child, bnode *parent);
+bool redefines_variable(inode* instruction);
 
 #endif // CSC553_INSTRUCTION_H

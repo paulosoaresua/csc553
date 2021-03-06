@@ -19,6 +19,8 @@ extern symtabnode *currFun;
 #define t_1B 0 // 1 byte size type
 #define t_4B 1
 
+static int local_var_id = 0;
+
 static symtabnode *SymTab[2][HASHTBLSZ];
 
 static symtabnode *free_char_temporaries;
@@ -280,6 +282,7 @@ void CleanupFnInfo(void) {
   free_int_temporaries = NULL;
   free_addr_temporaries = NULL;
   tmp_counter = 0;
+  local_var_id = 0;
 #if 0
   DumpSymTab();
 #endif
@@ -341,6 +344,7 @@ symtabnode *create_temporary(int type) {
     tmp = SymTabInsert(name, Local);
     tmp->type = type;
     tmp->is_temporary = true;
+    fill_id(tmp);
   }
 
   return tmp;
@@ -439,6 +443,16 @@ int fill_local_allocations() {
 symtabnode **get_symbol_table_entries(int scope) { return SymTab[scope]; }
 
 int get_symbol_table_size() { return HASHTBLSZ; }
+
+void fill_id(symtabnode* node) {
+  if(node->scope == Local) {
+    node->id = local_var_id++;
+  }
+}
+
+int get_total_local_variables() {
+  return local_var_id;
+}
 
 /*********************************************************************
  *                                                                   *

@@ -1,55 +1,77 @@
-///*
-// * Author: Paulo Soares.
-// * CSC 553 (Spring 2021)
-// */
-//
-//#ifndef CSC553_BLOCK_H
-//#define CSC553_BLOCK_H
-//
-//#include "instruction.h"
-//#include "protos.h"
-//#include "syntax-tree.h"
-//
-//// Represents a node in a block of instructions
-//typedef struct InstructionBlockNodeType {
-//  inode* instruction;
-//  struct InstructionBlockNodeType* next;
-//} iblock_node;
-//
-//// Represents a list of instructions in a block
-//typedef struct InstructionBlockType {
-//  iblock_node* head;
-//  iblock_node* tail;
-//} iblock;
-//
-//// Represents a node in a list of blocks
-//typedef struct BlockListNodeType {
-//  iblock* block;
-//  struct BlockListNodeType* next;
-//
-//  struct BlockListNodeType* children;
-//  struct BlockListNodeType* parents;
-//} blist_node;
-//
-//// Represents a list of blocks
-//typedef struct BlockListType {
-//  blist_node* head;
-//  blist_node* tail;
-//} blist;
-//
-//blist_node* create_new_block();
-//void append_block_to_list(blist_node* block, blist* list);
-//void append_instruction_to_block(inode* instruction, blist_node* block);
-//void add_child_to_block(blist_node* block, blist_node* child);
-//void add_parent_to_block(blist_node* block, blist_node* parent);
-//iblock_node * create_new_block_instruction(inode* instruction);
-//
-///**
-// * Builds a control flow graph for a given function.
-// *
-// * @param function_body_start_stnode: first syntax-tree node of a parsed
-// * function body.
-// */
-////void build_control_flow_graph(tnode *function_body_start_stnode);
-//
-//#endif // CSC553_CODE_TRANSLATION_H
+/*
+ * Author: Paulo Soares
+ * CSC 553 (Spring 2021)
+ */
+
+#ifndef CSC553_BLOCK_H
+#define CSC553_BLOCK_H
+
+#include "global.h"
+#include "set.h"
+
+typedef struct BlockListNode {
+  struct Block* block;
+  struct BlockListNode* next;
+} blist_node;
+
+typedef struct Block {
+  int id;
+  struct Instruction* first_instruction;
+  struct Instruction* last_instruction;
+
+  blist_node* children;
+  blist_node* parents;
+
+  set dominators;
+
+  union{
+    set gen;
+    set def;
+  };
+
+  union {
+    set kill;
+    set use;
+  };
+
+  set in;
+  set out;
+} bnode;
+
+/**
+ * Creates a new block.
+ *
+ * @return block
+ */
+bnode *create_block();
+
+/**
+ * Creates a parent to child and a child to parent connections.
+ *
+ * @param child: child block
+ * @param parent: parent block
+ *
+ */
+void connect_blocks(bnode *parent, bnode *child);
+
+/**
+ * Clear the list of created blocks and resets the global block ID.
+ *
+ */
+void clear_created_blocks();
+
+/**
+ * Gets the total number of blocks created.
+ *
+ * @return
+ */
+int get_num_created_blocks();
+
+/**
+ * Gets the list of all blocks created.
+ *
+ * @return Block list head
+ */
+blist_node *get_all_blocks();
+
+#endif

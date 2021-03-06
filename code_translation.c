@@ -147,9 +147,9 @@ void print_instructions(tnode *node) {
     case OP_Return:
       printf("\n");
       printf("  # OP_Return    \n");
-      if (curr_instruction->dest) {
-        load_to_register(curr_instruction->dest, "$v0",
-                         curr_instruction->dest->type);
+      if (SRC1(curr_instruction)) {
+        load_to_register(SRC1(curr_instruction), "$v0",
+                         SRC1(curr_instruction)->type);
       }
       printf("  la $sp, 0($fp) \n");
       printf("  lw $ra, 0($sp) \n");

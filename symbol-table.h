@@ -7,6 +7,8 @@
 #ifndef _SYMBOL_TABLE_H_
 #define _SYMBOL_TABLE_H_
 
+#include "set.h"
+
 #define Global 0
 #define Local  1
 
@@ -28,6 +30,12 @@ typedef struct stblnode {
   bool is_temporary;
   struct stblnode *next_free; // List of free temporaries
   struct stblnode *next;
+
+  // For code optimization
+  unsigned long long id; // Unique global ID
+  set definitions; // Set of other instructions withing a block where the
+  // variable defined by an assignment instruction is redefined (it's only
+  // used if the instruction is an assignment like one).
 } symtabnode;
 
 /*********************************************************************
@@ -111,5 +119,20 @@ int fill_local_allocations();
  * @return symbol table entries
  */
 symtabnode** get_globals();
+
+/**
+ * Set a unique numeric id to each local variable. This will help in the
+ * program analysis stage.
+ *
+ * @param node: symbol table entry for the variable
+ */
+void fill_id(symtabnode* node);
+
+/**
+ * Gets the total number of local variables created in a function
+ *
+ * @return
+ */
+int get_total_local_variables();
 
 #endif /* _SYMBOL_TABLE_H_ */

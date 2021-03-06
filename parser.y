@@ -26,6 +26,7 @@ extern void process_allocations();
 extern void optimize_instructions(tnode *t);
 extern void print_instructions(tnode *t);
 extern void collect_global(symtabnode* var);
+extern void fill_id(symtabnode* var);
 
   /*
    * struct treenode *currfnbodyTree is set to point to
@@ -106,7 +107,7 @@ prog
        generate_function_code(currFun, currfnbodyTree, 1);
        process_allocations(currFun);
        optimize_instructions(currfnbodyTree);
-       print_instructions(currfnbodyTree);
+       //print_instructions(currfnbodyTree);
 
       CleanupFnInfo(); 
     }
@@ -188,6 +189,7 @@ id_decl
       stptr->formal = stptr->is_extern = false;
       stptr->elt_type = t_None;
       collect_global(stptr);
+      fill_id(stptr);
     }
   }
 | Ident '[' ArraySize ']' { 

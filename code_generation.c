@@ -170,7 +170,7 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
                                        node->place);
       append_instruction(instruction, node);
     }
-    instruction = create_instruction(OP_Return, NULL, NULL, node->place);
+    instruction = create_instruction(OP_Return, node->place, NULL, NULL);
     append_instruction(instruction, node);
     break;
 
@@ -427,7 +427,7 @@ static void generate_bool_expr_code(symtabnode *func_header, tnode *node,
     append_child_instructions(stBinop_Op2(node), node);
 
     enum InstructionType type = get_boolean_comp_type(node->ntype);
-    instruction = create_cond_jump_instruction(OP_If, stBinop_Op1(node)->place,
+    instruction = create_cond_jump_instruction(stBinop_Op1(node)->place,
                                                stBinop_Op2(node)->place,
                                                label_true, type);
     append_instruction(instruction, node);

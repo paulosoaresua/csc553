@@ -24,16 +24,16 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if(optimize) {
-    freopen("../test/control_flow_opt.s", "w", stdout);
-  } else {
-    freopen("../test/control_flow.s", "w", stdout);
-  }
+//  if(optimize) {
+//    freopen("../test/control_flow_opt.s", "w", stdout);
+//  } else {
+//    freopen("../test/control_flow.s", "w", stdout);
+//  }
 
   SymTabInit(Global);
   SymTabInit(Local);
 
-  print_pre_defined_instructions();
+//  print_pre_defined_instructions();
   if (yyparse() < 0) {
     printf("main: syntax error\n");
     status = 1;
@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
     status = 1;
   }
 
-  print_strings();
+//  print_strings();
 
   return status;
 }

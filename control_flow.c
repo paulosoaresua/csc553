@@ -5,48 +5,66 @@
 
 #include "control_flow.h"
 
-static void find_block_leaders(tnode *function_body);
-static void update_blocks(tnode *function_body);
+static int total_instructions = 0;
+static int total_assignment_instructions = 0;
 
-void build_control_flow_graph(tnode *function_body) {
-  find_block_leaders(function_body);
-  update_blocks(function_body);
+static void find_block_leaders(inode *instruction_head);
+static void update_blocks(inode *instruction_head);
+static void find_dominators();
+static set get_dominators_from_predecessors(bnode *block);
+
+void build_control_flow_graph(inode *instruction_head) {
+  clear_created_blocks();
+  find_block_leaders(instruction_head);
+  update_blocks(instruction_head);
+  find_dominators();
 }
 
 /**
  * Find block leaders and associate new blocks to them.
  *
- * @param function_body: first node of a function body
+ * @param instruction_head: first instruction of a function
  */
-static void find_block_leaders(tnode *function_body) {
-  inode *curr_instruction = function_body->code_head;
-  bnode *curr_block;
+void find_block_leaders(inode *instruction_head) {
+  inode *curr_instruction = instruction_head;
 
   while (curr_instruction) {
+    curr_instruction->order =
+        total_instructions++; // Unique id for the instruction (it
+    // represents the order of the instruction in the list of instructions)
+
+    if (redefines_variable(curr_instruction)) {
+      curr_instruction->definition_id = total_assignment_instructions++;
+    }
+
     switch (curr_instruction->op_type) {
     case OP_Enter:
-      curr_block = create_block(curr_instruction, false);
-      curr_instruction->block = curr_block;
-
     case OP_Call:
-      curr_instruction->block = create_block(curr_instruction, true);
-      add_child_block(curr_instruction->block, curr_block);
-      curr_block = curr_instruction->block;
+      if (!curr_instruction->block) {
+        // It could have been set as leader before by another instruction
+        curr_instruction->block = create_block(curr_instruction, true);
+        curr_instruction->block->first_instruction = curr_instruction;
+      }
       break;
+
     case OP_If:
     case OP_Goto:
       // Destiny of the jump starts a new block
-      curr_instruction->jump_to->block =
-          create_block(curr_instruction->jump_to, true);
-      add_child_block(curr_instruction->jump_to->block, curr_block);
+      if (!curr_instruction->jump_to->block) {
+        curr_instruction->jump_to->block =
+            create_block(curr_instruction->jump_to, true);
+        curr_instruction->jump_to->block->first_instruction =
+            curr_instruction->jump_to;
+      }
 
       if (curr_instruction->next) {
         // Next node starts a new block
-        curr_instruction->next->block =
-            create_block(curr_instruction->next, true);
-        add_child_block(curr_instruction->next->block, curr_block);
-        curr_block = curr_instruction->next->block;
-        curr_instruction = curr_instruction->next;
+        if (!curr_instruction->next->block) {
+          curr_instruction->next->block =
+              create_block(curr_instruction->next, true);
+          curr_instruction->next->block->first_instruction =
+              curr_instruction->next;
+        }
       }
       break;
     default:
@@ -58,13 +76,13 @@ static void find_block_leaders(tnode *function_body) {
 }
 
 /**
- * Update each instruction with the blocks they belong to, and for each block
- * update its last instruction.
+ * Update each instruction with the blocks they belong to, connections
+ * between subsequent blocks, and blocks' last instructions.
  *
- * @param function_body: first node of a function body
+ * @param instruction_head: first instruction of a function
  */
-void update_blocks(tnode *function_body) {
-  inode *curr_instruction = function_body->code_head;
+void update_blocks(inode *instruction_head) {
+  inode *curr_instruction = instruction_head;
 
   if (curr_instruction) {
     bnode *curr_block = curr_instruction->block;
@@ -73,13 +91,29 @@ void update_blocks(tnode *function_body) {
     while (curr_instruction) {
       if (!curr_instruction->block) {
         curr_instruction->block = curr_block;
-        // When we switch to a new block, this will have the last instruction
-        // of this block.
-        curr_block->last_instruction = curr_instruction;
       } else {
         // This instruction is the leader of another block. Save this block
         // to propagate further.
+        if (curr_instruction->previous &&
+            curr_instruction->previous->jump_to != curr_instruction) {
+          // We don'' connect if the previous instruction was a jump to the
+          // current one as this was already handled by the previous
+          // instruction.
+          connect_blocks(curr_instruction->previous->block,
+                         curr_instruction->block);
+        }
         curr_block = curr_instruction->block;
+      }
+
+      // When we switch to a new block, this will have the last instruction
+      // of the previous block.
+      curr_block->last_instruction = curr_instruction;
+
+      // Add the instruction this one jumps to as a child of the current
+      // instruction's block
+      if (curr_instruction->op_type == OP_If ||
+          curr_instruction->op_type == OP_Goto) {
+        connect_blocks(curr_block, curr_instruction->jump_to->block);
       }
 
       curr_instruction = curr_instruction->next;
@@ -87,85 +121,95 @@ void update_blocks(tnode *function_body) {
   }
 }
 
-//#include "symbol-table.h"
-//
-// typedef struct block_list {
-//  iblock *block;
-//  iblock *next;
-//} blist;
-//
-// static blist *find_blocks(tnode *function_body_start_stnode);
-// static void append_instruction_to_block(bnode *block, inode *instruction);
-//
-// void build_control_flow_graph(tnode *function_body_start_stnode) {
-//  blist *blist_node = find_blocks(function_body_start_stnode);
-//
-//  while (blist_node) {
-//    print_instruction(blist_node->block->instruction);
-//    blist_node = blist_node->next;
-//  }
-//
-//  //  inode *curr_instruction = function_body_start_stnode->code_head;
-//  //
-//  //  while (curr_instruction) {
-//  //
-//  //    curr_instruction = curr_instruction->next;
-//  //  }
-//}
-//
-// static blist *find_blocks(tnode *function_body_start_stnode) {
-//  blist *blist_header;
-//
-//  inode *curr_instruction = function_body_start_stnode->code_head;
-//  if (curr_instruction) {
-//    // The first instruction of a function is always a leader
-//    blist_header = zalloc(sizeof(blist));
-//    blist *curr_blist_node = blist_header;
-//
-//    blist *curr_block = zalloc(sizeof(bnode));
-//    while (curr_instruction) {
-//      if (curr_instruction->op_type == OP_Label) {
-//        // Instruction starts a new block
-//        curr_blist_node =
-//            append_block_to_block_list(curr_block, curr_blist_node);
-//        curr_block->next = zalloc(sizeof(bnode));
-//        curr_block = curr_block->next;
-//      } else if (curr_instruction->op_type == OP_If ||
-//                 curr_instruction->op_type == OP_Goto) {
-//        // Append current instruction to the current block and move to the
-//        // next instruction that must be part of a new block
-//        append_instruction_to_block(curr_instruction, curr_block);
-//
-//        curr_instruction = curr_instruction->next;
-//        if (curr_instruction) {
-//          // Next instruction starts a new block
-//          curr_block->next = zalloc(sizeof(bnode));
-//          curr_block = curr_block->next;
-//        } else {
-//          break;
-//        }
-//      }
-//
-//      append_instruction_to_block(curr_instruction, curr_block);
-//
-//      curr_instruction = curr_instruction->next;
-//    }
-//  }
-//
-//  return header;
-//}
-//
-// static void append_instruction_to_block(bnode *block, inode *instruction) {
-//  if (!block->instructions_head) {
-//    block->instructions_head = zalloc(sizeof(iblock));
-//    block->instructions_tail = block->instructions_head;
-//  }
-//
-//  if (block->instructions_tail->instruction) {
-//    block->instructions_tail->next = zalloc(sizeof(iblock));
-//    block->instructions_tail->next->instruction = instruction;
-//    block->instructions_tail = block->instructions_tail->next;
-//  } else {
-//    block->instructions_tail->instruction = instruction;
-//  }
-//}
+void find_dominators() {
+  int n = get_num_created_blocks();
+  set universe_set = create_full_set(n);
+
+  // Initialization
+  blist_node *block_list_head = get_all_blocks();
+  blist_node *block_list_node = block_list_head;
+  while (block_list_node) {
+    if (!block_list_node->block->parents) {
+      set root_set = create_empty_set(n);
+      add_to_set(block_list_node->block->id, root_set);
+      block_list_node->block->dominators = root_set;
+    } else {
+      block_list_node->block->dominators = universe_set;
+    }
+
+    block_list_node = block_list_node->next;
+  }
+
+  // Update dominators until convergence
+  bool converged = false;
+  while (!converged) {
+    block_list_node = block_list_head;
+    converged = true;
+    while (block_list_node && block_list_node->block->parents) {
+      set block_set = create_empty_set(n);
+      add_to_set(block_list_node->block->id, block_set);
+      set new_set = unify_sets(
+          block_set, get_dominators_from_predecessors(block_list_node->block));
+      if (!are_set_equals(block_list_node->block->dominators, new_set)) {
+        block_list_node->block->dominators = new_set;
+        converged = false;
+      }
+
+      block_list_node = block_list_node->next;
+    }
+  }
+}
+
+/**
+ * Finds the set comprised by the intersection of dominators of the
+ * predecessors of a block.
+ *
+ * @param block: block
+ *
+ * @return Set formed by the intersection of the dominators from all the
+ * predecessors of a block.
+ */
+set get_dominators_from_predecessors(bnode *block) {
+  if (!block->parents) {
+    // Empty set if no predecessors
+    return create_empty_set(block->dominators.max_size);
+  }
+
+  blist_node *parent = block->parents;
+  set set = parent->block->dominators;
+  parent = parent->next;
+  while (parent) {
+    set = intersect_sets(set, parent->block->dominators);
+    parent = parent->next;
+  }
+
+  return set;
+}
+
+void print_control_flow_graph() {
+  blist_node *block_list_head = get_all_blocks();
+  blist_node *block_list_node = block_list_head;
+
+  while (block_list_node) {
+    printf("Block %d [Leader: ", block_list_node->block->id);
+    print_instruction(block_list_node->block->first_instruction);
+    printf("] -> ");
+    blist_node *block_list_child = block_list_node->block->children;
+    while (block_list_child) {
+      if (block_list_child->next) {
+        printf("%d, ", block_list_child->block->id);
+      } else {
+        printf("%d\n", block_list_child->block->id);
+      }
+      block_list_child = block_list_child->next;
+    }
+
+    block_list_node = block_list_node->next;
+  }
+}
+
+int get_total_instructions() { return total_instructions; }
+
+int get_total_assignment_instructions() {
+  return total_assignment_instructions;
+}

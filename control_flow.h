@@ -14,43 +14,29 @@
  * Builds a control flow graph for the set of instructions within a function
  * body.
  *
- * @param function_body: first node of a function body
+ * @param instruction_head: first instruction of a function
  */
-void build_control_flow_graph(tnode* function_body);
+void build_control_flow_graph(inode* instruction_head);
+
+/**
+ * Print blocks (and their leaders' ids) and their connections
+ *
+ */
+void print_control_flow_graph();
+
+/**
+ * Gets the total number of instructions created within a function.
+ *
+ * @return
+ */
+int get_total_instructions();
+
+/**
+ * Gets the total number of assignment instructions created within a function.
+ *
+ * @return
+ */
+int get_total_assignment_instructions();
 
 #endif
 
-
-
-
-
-//
-//#ifndef CSC553_CODE_TRANSLATION_H
-//#define CSC553_CODE_TRANSLATION_H
-//
-//#include "instruction.h"
-//#include "protos.h"
-//#include "syntax-tree.h"
-//
-//typedef struct instruction_block {
-//  inode* instruction;
-//  struct instruction_block* next;
-//} iblock;
-//
-//typedef struct block_node {
-//  iblock* instructions_head;
-//  iblock* instructions_tail;
-//  struct block_node *parents;
-//  struct block_node *children;
-//  struct block_node *next;
-//} bnode;
-//
-///**
-// * Builds a control flow graph for a given function.
-// *
-// * @param function_body_start_stnode: first syntax-tree node of a parsed
-// * function body.
-// */
-//void build_control_flow_graph(tnode *function_body_start_stnode);
-//
-//#endif // CSC553_CODE_TRANSLATION_H
