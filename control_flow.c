@@ -205,15 +205,15 @@ void print_control_flow_graph(FILE* file) {
   blist_node *block_list_node = block_list_head;
 
   while (block_list_node) {
-    printf("Block %d [Leader: ", block_list_node->block->id);
+    fprintf(file, "Block %d [Leader: ", block_list_node->block->id);
     print_instruction(block_list_node->block->first_instruction, file);
-    printf("] -> ");
+    fprintf(file, "] -> ");
     blist_node *block_list_child = block_list_node->block->children;
     while (block_list_child) {
       if (block_list_child->next) {
-        printf("%d, ", block_list_child->block->id);
+        fprintf(file, "%d, ", block_list_child->block->id);
       } else {
-        printf("%d\n", block_list_child->block->id);
+        fprintf(file, "%d\n", block_list_child->block->id);
       }
       block_list_child = block_list_child->next;
     }

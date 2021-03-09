@@ -60,6 +60,13 @@ void find_def_and_use_sets(blist_node *block_list_head) {
         continue;
       }
 
+      if (curr_instruction->op_type == OP_Assign &&
+          curr_instruction->dest == SRC1(curr_instruction)) {
+        // Ignore null assignments
+        curr_instruction = curr_instruction->previous;
+        continue;
+      }
+
       set lhs_set = create_empty_set(n);
       set rhs_set = create_empty_set(n);
 

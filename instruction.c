@@ -133,8 +133,8 @@ void print_instruction(inode *instruction, FILE *file) {
     break;
 
   case OP_If:
-    fprintf(file, "COND_JUMP %s ? %s", SRC1(instruction)->name,
-            SRC2(instruction)->name);
+    fprintf(file, "COND_JUMP %s ? %s -> %s", SRC1(instruction)->name,
+            SRC2(instruction)->name, instruction->jump_to->label);
     break;
 
   case OP_Goto:

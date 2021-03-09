@@ -35,7 +35,8 @@ void optimize_instructions(tnode *function_body) {
     fill_backward_connections(function_body->code_head);
     build_control_flow_graph(function_body->code_head);
     if (file_3addr) {
-      fprintf(file_3addr, "\nBefore Optimization\n");
+      print_control_flow_graph(file_3addr);
+      fprintf(file_3addr, "\n\nBefore Optimization\n");
       print_3addr_instructions(function_body->code_head);
     }
     optimize_locally(function_body->code_head);
@@ -101,6 +102,17 @@ void run_peephole_optimization(inode *instruction_head) {
           curr_instruction->dead = true;
         }
       }
+
+      if (curr_instruction->previous &&
+          curr_instruction->dest->type != t_Addr) {
+        if (SRC1(curr_instruction) == curr_instruction->previous->dest &&
+            SRC1(curr_instruction)->is_temporary) {
+
+          curr_instruction->previous->dest = curr_instruction->dest;
+          curr_instruction->dead = true;
+        }
+        break;
+      }
       break;
     default:
       break;
@@ -115,10 +127,25 @@ void do_copy_propagation() {
   while (block_list_node) {
     inode *curr_instruction = block_list_node->block->first_instruction;
 
-    while (curr_instruction) {
+    while (curr_instruction &&
+           curr_instruction->block == block_list_node->block) {
       if (curr_instruction->dead) {
         curr_instruction = curr_instruction->next;
         continue;
+      }
+
+      if (curr_instruction->op_type == OP_Assign) {
+        symtabnode *root_dest = curr_instruction->dest->copied_from
+                                    ? curr_instruction->dest->copied_from
+                                    : curr_instruction->dest;
+        symtabnode *root_src = SRC1(curr_instruction)->copied_from
+                                   ? SRC1(curr_instruction)->copied_from
+                                   : SRC1(curr_instruction);
+        if (root_dest == root_src) {
+          curr_instruction->dead = true;
+          curr_instruction = curr_instruction->next;
+          continue;
+        }
       }
 
       if (curr_instruction->dest) {
@@ -156,7 +183,7 @@ void do_copy_propagation() {
           SRC1(curr_instruction) = SRC1(curr_instruction)->copied_from;
         }
 
-        if (SRC2(curr_instruction) && SRC1(curr_instruction)->copied_from) {
+        if (SRC2(curr_instruction) && SRC2(curr_instruction)->copied_from) {
           SRC2(curr_instruction) = SRC2(curr_instruction)->copied_from;
         }
       }
@@ -234,6 +261,14 @@ bool remove_dead_instructions() {
         continue;
       }
 
+      if (curr_instruction->op_type == OP_Assign &&
+          curr_instruction->dest == SRC1(curr_instruction)) {
+        // Ignore null assignments
+        curr_instruction->dead = true;
+        curr_instruction = curr_instruction->previous;
+        continue;
+      }
+
       set lhs_set = create_empty_set(n);
       set rhs_set = create_empty_set(n);
 
@@ -262,9 +297,6 @@ bool remove_dead_instructions() {
           curr_instruction->dest->scope == Local) {
         if (!does_elto_belong_to_set(curr_instruction->dest->id,
                                      live_instructions)) {
-          // Any update in an array is treated as a usage of the array since
-          // it changes the content of it. If changed inside a function, it
-          // should affect the results outside of that function.
           curr_instruction->dead = true;
           dead_instructions_found = true;
         }
@@ -286,17 +318,18 @@ static void print_3addr_instructions(inode *instruction_head) {
   inode *curr_instruction = instruction_head;
   bnode *curr_block;
   while (curr_instruction) {
-    if (curr_instruction->dead || curr_instruction->op_type == OP_Global) {
-      curr_instruction = curr_instruction->next;
-      continue;
-    }
-
     if (curr_instruction->block != curr_block) {
       curr_block = curr_instruction->block;
       fprintf(file_3addr, "\n-----------\n");
       fprintf(file_3addr, " Block %d    \n", curr_block->id);
       fprintf(file_3addr, "-----------  \n");
     }
+
+    if (curr_instruction->dead || curr_instruction->op_type == OP_Global) {
+      curr_instruction = curr_instruction->next;
+      continue;
+    }
+
     fprintf(file_3addr, "%d: ", curr_instruction->order);
     print_instruction(curr_instruction, file_3addr);
     if (redefines_variable(curr_instruction)) {

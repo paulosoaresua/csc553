@@ -15,7 +15,7 @@ set create_empty_set(int max_size) {
 
   set.max_size = max_size;
   set.num_partitions = ceil((double) max_size / BITS_PER_PARTITION);
-  set.mask = zalloc(set.num_partitions * BYTES_PER_PARTITION);
+  set.mask = zalloc(fmax(1, set.num_partitions * BYTES_PER_PARTITION));
   for (int i = 0; i < set.num_partitions; i++) {
     set.mask[i] = 0;
   }
