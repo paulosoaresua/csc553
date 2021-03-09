@@ -89,7 +89,6 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
       tmp = create_constant_variable(t_Int, node->val.iconst);
       instruction = create_instruction(OP_Assign, tmp, NULL, node->place);
       append_instruction(instruction, node);
-      free_temporary(node->place);
     }
     break;
 
@@ -102,7 +101,6 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
       tmp = create_constant_variable(t_Char, node->val.iconst);
       instruction = create_instruction(OP_Assign, tmp, NULL, node->place);
       append_instruction(instruction, node);
-      free_temporary(node->place);
     }
     break;
 
