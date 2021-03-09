@@ -15,7 +15,7 @@ static var_list_node *propagated_vars;
 static void optimize_locally(inode *instruction_head);
 static void run_peephole_optimization(inode *instruction_head);
 static void do_copy_propagation();
-static void optimize_globally(inode *instruction_head);
+static void optimize_globally();
 static void do_dead_code_elimination();
 static bool remove_dead_instructions();
 static void print_3addr_instructions(inode *instruction_head);
@@ -39,7 +39,7 @@ void optimize_instructions(tnode *function_body) {
       print_3addr_instructions(function_body->code_head);
     }
     optimize_locally(function_body->code_head);
-    optimize_globally(function_body->code_head);
+    optimize_globally();
     if (file_3addr) {
       fprintf(file_3addr, "\nAfter Optimization\n");
       print_3addr_instructions(function_body->code_head);
@@ -262,14 +262,11 @@ bool remove_dead_instructions() {
           curr_instruction->dest->scope == Local) {
         if (!does_elto_belong_to_set(curr_instruction->dest->id,
                                      live_instructions)) {
-//          if (curr_instruction->op_type != OP_Assign ||
-//              curr_instruction->dest->type != t_Addr) {
-            // Any update in an array is treated as a usage of the array since
-            // it changes the content of it. If changed inside a function, it
-            // should affect the results outside of that function.
-            curr_instruction->dead = true;
-            dead_instructions_found = true;
-//          }
+          // Any update in an array is treated as a usage of the array since
+          // it changes the content of it. If changed inside a function, it
+          // should affect the results outside of that function.
+          curr_instruction->dead = true;
+          dead_instructions_found = true;
         }
       }
 
