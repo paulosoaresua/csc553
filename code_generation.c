@@ -86,8 +86,10 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
       return;
     } else {
       node->place = create_temporary(t_Int);
-      instruction = create_const_int_instruction(node->val.iconst, node->place);
+      tmp = create_constant_variable(t_Int, node->val.iconst);
+      instruction = create_instruction(OP_Assign, tmp, NULL, node->place);
       append_instruction(instruction, node);
+      free_temporary(node->place);
     }
     break;
 
@@ -97,9 +99,10 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
       return;
     } else {
       node->place = create_temporary(t_Char);
-      instruction =
-          create_const_char_instruction(node->val.iconst, node->place);
+      tmp = create_constant_variable(t_Char, node->val.iconst);
+      instruction = create_instruction(OP_Assign, tmp, NULL, node->place);
       append_instruction(instruction, node);
+      free_temporary(node->place);
     }
     break;
 
@@ -142,10 +145,7 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
     append_instruction(instruction, node);
 
     if (function_ptr->ret_type != t_None) {
-      // $v0 will be saved in a dedicated memory cell (using t_Int here as a
-      // proxy to t_Word)
       node->place = create_temporary(function_ptr->ret_type);
-      //      node->place = create_temporary(t_Int);
       instruction = create_instruction(OP_Retrieve, NULL, NULL, node->place);
       append_instruction(instruction, node);
     }
@@ -427,9 +427,8 @@ static void generate_bool_expr_code(symtabnode *func_header, tnode *node,
     append_child_instructions(stBinop_Op2(node), node);
 
     enum InstructionType type = get_boolean_comp_type(node->ntype);
-    instruction = create_cond_jump_instruction(stBinop_Op1(node)->place,
-                                               stBinop_Op2(node)->place,
-                                               label_true, type);
+    instruction = create_cond_jump_instruction(
+        stBinop_Op1(node)->place, stBinop_Op2(node)->place, label_true, type);
     append_instruction(instruction, node);
 
     instruction = create_jump_instruction(label_false);

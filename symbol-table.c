@@ -393,6 +393,17 @@ symtabnode *create_constant_string(char *str) {
   return str_node;
 }
 
+symtabnode *create_constant_variable(int type, int value) {
+  symtabnode *const_var = (symtabnode *)zalloc(sizeof(symtabnode));
+  const_var->type = type;
+  const_var->scope = Local;
+  const_var->name = "constant";
+  const_var->const_val = value;
+  const_var->is_constant = true;
+
+  return const_var;
+}
+
 symtabnode *get_string_list_head() { return string_list.head; }
 
 static int allocate(int initial_offset, int byte_size_type) {

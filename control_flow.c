@@ -204,6 +204,7 @@ void print_control_flow_graph(FILE* file) {
   blist_node *block_list_head = get_all_blocks();
   blist_node *block_list_node = block_list_head;
 
+  fprintf(file, "\n");
   while (block_list_node) {
     fprintf(file, "Block %d [Leader: ", block_list_node->block->id);
     print_instruction(block_list_node->block->first_instruction, file);

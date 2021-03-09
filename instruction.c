@@ -35,20 +35,6 @@ inode *create_expr_instruction(enum OpType i_type, symtabnode *src1,
   return instruction;
 }
 
-inode *create_const_int_instruction(int int_val, symtabnode *dest) {
-  inode *instruction = create_instruction(OP_Assign_Int, NULL, NULL, dest);
-  instruction->val.const_int = int_val;
-
-  return instruction;
-}
-
-inode *create_const_char_instruction(int char_val, symtabnode *dest) {
-  inode *instruction = create_instruction(OP_Assign_Int, NULL, NULL, dest);
-  instruction->val.const_int = char_val;
-
-  return instruction;
-}
-
 inode *create_global_decl_instruction(symtabnode *var) {
   inode *instruction = create_instruction(OP_Global, var, NULL, NULL);
 
@@ -69,63 +55,72 @@ inode *create_jump_instruction(inode *destiny_instruction) {
   return instruction;
 }
 
+static char *get_var_name(symtabnode *var) {
+  if (!var) {
+    return "";
+  }
+
+  if (var->is_constant) {
+    char *name = malloc(30 * sizeof(char));
+    sprintf(name, "%s(%d)", var->name, var->const_val);
+    return name;
+  } else {
+    return var->name;
+  }
+}
+
 void print_instruction(inode *instruction, FILE *file) {
   switch (instruction->op_type) {
   case OP_Global: {
-    fprintf(file, "GLOBAL %s", SRC1(instruction)->name);
+    fprintf(file, "GLOBAL %s", get_var_name(SRC1(instruction)));
     break;
   }
   case OP_Enter: {
-    fprintf(file, "ENTER %s", SRC1(instruction)->name);
+    fprintf(file, "ENTER %s", get_var_name(SRC1(instruction)));
     break;
   }
-
-  case OP_Assign_Int:
-  case OP_Assign_Char:
-    if (instruction->dest->type == t_Addr) {
-      fprintf(file, "ASSIGN_CONST &%s = %d", instruction->dest->name,
-              instruction->val.const_int);
-    } else {
-      fprintf(file, "ASSIGN_CONST %s = %d", instruction->dest->name,
-              instruction->val.const_int);
-    }
-    break;
 
   case OP_Assign:
     if (instruction->dest->type == t_Addr) {
       fprintf(file, "ASSIGN &%s = %s", instruction->dest->name,
-              SRC1(instruction)->name);
+              get_var_name(SRC1(instruction)));
     } else {
       fprintf(file, "ASSIGN %s = %s", instruction->dest->name,
-              SRC1(instruction)->name);
+              get_var_name(SRC1(instruction)));
     }
     break;
 
   case OP_Param: {
-    fprintf(file, "PARAM %s", SRC1(instruction)->name);
+    fprintf(file, "PARAM %s", get_var_name(SRC1(instruction)));
     break;
   }
 
   case OP_Call: {
-    fprintf(file, "CALL %s", SRC1(instruction)->name);
+    fprintf(file, "CALL %s", get_var_name(SRC1(instruction)));
     break;
   }
 
   case OP_Return:
-    fprintf(file, "RETURN");
+    if (SRC1(instruction)) {
+      fprintf(file, "RETURN %s", get_var_name(SRC1(instruction)));
+    } else {
+      fprintf(file, "RETURN");
+    }
+
     break;
 
   case OP_Retrieve:
-    fprintf(file, "RETRIEVE %s", instruction->dest->name);
+    fprintf(file, "RETRIEVE %s", get_var_name(instruction->dest));
     break;
 
   case OP_UMinus:
-    fprintf(file, "UMINUS %s", SRC1(instruction)->name);
+    fprintf(file, "UMINUS %s", get_var_name(SRC1(instruction)));
     break;
 
   case OP_BinaryArithmetic:
-    fprintf(file, "BINARY_OPERATION %s = %s ? %s", instruction->dest->name,
-            SRC1(instruction)->name, SRC2(instruction)->name);
+    fprintf(file, "BINARY_OPERATION %s = %s ? %s",
+            get_var_name(instruction->dest), get_var_name(SRC1(instruction)),
+            get_var_name(SRC2(instruction)));
     break;
 
   case OP_Label:
@@ -133,8 +128,8 @@ void print_instruction(inode *instruction, FILE *file) {
     break;
 
   case OP_If:
-    fprintf(file, "COND_JUMP %s ? %s -> %s", SRC1(instruction)->name,
-            SRC2(instruction)->name, instruction->jump_to->label);
+    fprintf(file, "COND_JUMP %s ? %s -> %s", get_var_name(SRC1(instruction)),
+            get_var_name(SRC2(instruction)), instruction->jump_to->label);
     break;
 
   case OP_Goto:
@@ -142,13 +137,13 @@ void print_instruction(inode *instruction, FILE *file) {
     break;
 
   case OP_Index_Array:
-    fprintf(file, "ARRAY_INDEX %s = &%s[%s]", instruction->dest->name,
-            SRC2(instruction)->name, SRC1(instruction)->name);
+    fprintf(file, "ARRAY_INDEX %s = &%s[%s]", get_var_name(instruction->dest),
+            get_var_name(SRC2(instruction)), get_var_name(SRC1(instruction)));
     break;
 
   case OP_Deref:
-    fprintf(file, "DEREF %s = *%s", instruction->dest->name,
-            SRC1(instruction)->name);
+    fprintf(file, "DEREF %s = *%s", get_var_name(instruction->dest),
+            get_var_name(SRC1(instruction)));
     break;
 
   default:
@@ -206,8 +201,7 @@ bool redefines_variable(inode *instruction) {
 }
 
 bool is_rhs_variable(inode *instruction) {
-  return SRC1(instruction) && instruction->op_type != OP_Assign_Int &&
-         instruction->op_type != OP_Assign_Char &&
-         instruction->op_type != OP_Call && instruction->op_type != OP_Enter &&
-         instruction->op_type != OP_Global;
+  // Instructions where src1 is a variable
+  return SRC1(instruction) && instruction->op_type != OP_Call &&
+         instruction->op_type != OP_Enter && instruction->op_type != OP_Global;
 }

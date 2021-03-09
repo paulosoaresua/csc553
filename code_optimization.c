@@ -76,20 +76,6 @@ void run_peephole_optimization(inode *instruction_head) {
         curr_instruction->next->dead = true;
       }
       break;
-    case OP_Assign_Int:
-    case OP_Assign_Char:
-      if (curr_instruction->next) {
-        if (curr_instruction->next->op_type == OP_Assign &&
-            curr_instruction->dest == SRC1(curr_instruction->next) &&
-            curr_instruction->dest->is_temporary) {
-
-          curr_instruction->next->op_type = OP_Assign_Int;
-          curr_instruction->next->val.const_int =
-              curr_instruction->val.const_int;
-          curr_instruction->dead = true;
-        }
-      }
-      break;
     case OP_Assign:
       if (curr_instruction->dest == SRC1(curr_instruction)) {
         curr_instruction->dead = true;
@@ -105,13 +91,13 @@ void run_peephole_optimization(inode *instruction_head) {
 
       if (curr_instruction->previous &&
           curr_instruction->dest->type != t_Addr) {
+        // Bypass temporary assignment
         if (SRC1(curr_instruction) == curr_instruction->previous->dest &&
             SRC1(curr_instruction)->is_temporary) {
 
           curr_instruction->previous->dest = curr_instruction->dest;
           curr_instruction->dead = true;
         }
-        break;
       }
       break;
     default:

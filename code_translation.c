@@ -85,41 +85,40 @@ void print_instructions(tnode *node) {
       break;
     }
 
-    case OP_Assign_Int:
-    case OP_Assign_Char:
-      printf("\n");
-      if(curr_instruction->op_type == OP_Assign_Int) {
-        printf("  # OP_Assign_Int \n");
-      } else{
-        printf("  # OP_Assign_Char \n");
-      }
-
-      load_int_to_register(curr_instruction->val.const_int, "$t0");
-      if (curr_instruction->dest->type == t_Addr) {
-        load_to_register(curr_instruction->dest, "$t1", t_Word);
-        char mem_op_type = get_mem_op_type(curr_instruction->dest->elt_type);
-        printf("  s%c $t0, 0($t1) \n", mem_op_type);
-      } else {
-        store_at_memory(curr_instruction->dest, "$t0");
-      }
-      break;
+      //    case OP_Assign_Int:
+      //    case OP_Assign_Char:
+      //      printf("\n");
+      //      if(curr_instruction->op_type == OP_Assign_Int) {
+      //        printf("  # OP_Assign_Int \n");
+      //      } else{
+      //        printf("  # OP_Assign_Char \n");
+      //      }
+      //
+      //      load_int_to_register(curr_instruction->val.const_int, "$t0");
+      //      if (curr_instruction->dest->type == t_Addr) {
+      //        load_to_register(curr_instruction->dest, "$t1", t_Word);
+      //        char mem_op_type =
+      //        get_mem_op_type(curr_instruction->dest->elt_type); printf("  s%c
+      //        $t0, 0($t1) \n", mem_op_type);
+      //      } else {
+      //        store_at_memory(curr_instruction->dest, "$t0");
+      //      }
+      //      break;
 
     case OP_Assign:
       printf("\n");
       printf("  # OP_Assign      \n");
+      load_to_register(SRC1(curr_instruction), "$t0",
+                       SRC1(curr_instruction)->type);
       if (curr_instruction->dest->type == t_Addr) {
         // The LHS is an array memory location, therefore we load the word in
         // curr_instruction->dest instead of its address. And the type of the
         // value to be stored in the array location is determined by the type
         // of the elements in the array.
-        load_to_register(SRC1(curr_instruction), "$t0",
-                         SRC1(curr_instruction)->type);
         load_to_register(curr_instruction->dest, "$t1", t_Word);
         char mem_op_type = get_mem_op_type(curr_instruction->dest->elt_type);
         printf("  s%c $t0, 0($t1) \n", mem_op_type);
       } else {
-        load_to_register(SRC1(curr_instruction), "$t0",
-                         SRC1(curr_instruction)->type);
         store_at_memory(curr_instruction->dest, "$t0");
       }
       break;
@@ -298,20 +297,23 @@ static void load_int_to_register(int integer, char *reg) {
   int high = (integer >> 16);
   int low = (integer & 0xffff);
   if (high == 0) {
-    printf("  li $t0, %d \n", integer);
+    printf("  li %s, %d \n", reg, integer);
   } else {
-    printf("  lui $t0, %d \n", high);
-    printf("  ori $t0, %d \n", low);
+    printf("  lui %s, %d \n", reg, high);
+    printf("  ori %s, %d \n", reg, low);
   }
 }
 
 static void load_to_register(symtabnode *addr, char *reg, int dest_type) {
-  char load_op_type = get_mem_op_type(dest_type);
-
-  if (addr->scope == Global) {
-    printf("  l%c %s, _%s \n", load_op_type, reg, addr->name);
+  if (addr->is_constant) {
+    load_int_to_register(addr->const_val, reg);
   } else {
-    printf("  l%c %s, %d($fp) \n", load_op_type, reg, addr->fp_offset);
+    char load_op_type = get_mem_op_type(dest_type);
+    if (addr->scope == Global) {
+      printf("  l%c %s, _%s \n", load_op_type, reg, addr->name);
+    } else {
+      printf("  l%c %s, %d($fp) \n", load_op_type, reg, addr->fp_offset);
+    }
   }
 }
 

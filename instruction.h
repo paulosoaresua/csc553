@@ -10,8 +10,6 @@
 #include "symbol-table.h"
 
 typedef enum OpType {
-  OP_Assign_Int,
-  OP_Assign_Char,
   OP_Assign,
   OP_Call,
   OP_Param,
@@ -113,25 +111,6 @@ inode *create_expr_instruction(enum OpType op_type, symtabnode *src1,
  * @return new instruction
  */
 inode *create_const_int_instruction(int int_val, symtabnode *dest);
-
-/**
- * Creates an instruction for a constant character.
- *
- * @param char_val: constant char as an integer
- * @param dest: destination to store the char
- *
- * @return new instruction
- */
-inode *create_const_char_instruction(int char_val, symtabnode *dest);
-
-/**
- * Creates an instruction for declaration of a global variable.
- *
- * @param var: symbol table entry for the global variable
- *
- * @return new instruction
- */
-inode *create_global_decl_instruction(symtabnode *var);
 
 /**
  * Creates a conditional jump instruction to jump to a label.

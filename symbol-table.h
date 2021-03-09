@@ -31,8 +31,10 @@ typedef struct stblnode {
   int byte_size;           // Byte size of the local variables and temporaries
   int fp_offset;           // Memory location as an offset of the frame pointer
   int num_formals;         // Number of formal parameters
-  char* const_str;        // Constant string
+  char* const_str;         // Constant string
+  int const_val;           // Variable with a constant value
   bool is_temporary;
+  bool is_constant;
   struct stblnode *next_free; // List of free temporaries
   struct stblnode *next;
 
@@ -106,6 +108,18 @@ void free_temporary(symtabnode* tmp);
  * @return pointer to the newly created entry
  */
 symtabnode *create_constant_string(char* str);
+
+/**
+ * Creates a symbol table node to contain a constant value. This node is not
+ * added to the symbol table, it can be used as a RHS variable in some
+ * instructions.
+ *
+ * @param type: type of the variable
+ * @param value: value of the constant
+ *
+ * @return pointer to the newly created entry
+ */
+symtabnode *create_constant_variable(int type, int value);
 
 /**
  * Returns the head of the list of strings created.
