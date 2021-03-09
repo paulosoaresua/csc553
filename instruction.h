@@ -51,7 +51,6 @@ typedef struct Instruction {
       symtabnode *src1;
       symtabnode *src2;
     } op_members;
-    int const_int;
   } val;
 
   struct Instruction *previous;
@@ -103,14 +102,13 @@ inode *create_expr_instruction(enum OpType op_type, symtabnode *src1,
                                enum InstructionType type);
 
 /**
- * Creates an instruction for a constant integer.
+ * Creates an instruction for declaration of a global variable.
  *
- * @param constant: constant integer
- * @param dest: destination to store the integer
+ * @param var: symbol table entry for the global variable
  *
  * @return new instruction
  */
-inode *create_const_int_instruction(int int_val, symtabnode *dest);
+inode *create_global_decl_instruction(symtabnode *var);
 
 /**
  * Creates a conditional jump instruction to jump to a label.

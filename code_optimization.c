@@ -272,11 +272,13 @@ bool remove_dead_instructions() {
       }
 
       if (is_rhs_variable(curr_instruction)) {
-        if (SRC1(curr_instruction) && SRC1(curr_instruction)->scope == Local) {
+        if (SRC1(curr_instruction) && SRC1(curr_instruction)->scope == Local &&
+            !SRC1(curr_instruction)->is_constant) {
           add_to_set(SRC1(curr_instruction)->id, rhs_set);
         }
 
-        if (SRC2(curr_instruction) && SRC2(curr_instruction)->scope == Local) {
+        if (SRC2(curr_instruction) && SRC2(curr_instruction)->scope == Local &&
+            !SRC2(curr_instruction)->is_constant) {
           add_to_set(SRC2(curr_instruction)->id, rhs_set);
         }
       }
