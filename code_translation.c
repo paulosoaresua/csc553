@@ -128,8 +128,7 @@ void print_instructions(tnode *node) {
       printf("\n");
       printf("  # OP_Param       \n");
       if (SRC1(curr_instruction)->formal &&
-          SRC1(curr_instruction)->type == t_Addr) {
-
+          SRC1(curr_instruction)->type == t_Array) {
         // When a function passes one of its formal to another, just copy
         // the whole word if it stores a memory address
         load_to_register(SRC1(curr_instruction), "$t0", t_Word);
