@@ -82,13 +82,23 @@ void print_instruction(inode *instruction, FILE *file) {
 
   case OP_Assign_Int:
   case OP_Assign_Char:
-    fprintf(file, "ASSIGN_CONST %s = %d", instruction->dest->name,
-            instruction->val.const_int);
+    if (instruction->dest->type == t_Addr) {
+      fprintf(file, "ASSIGN_CONST &%s = %d", instruction->dest->name,
+              instruction->val.const_int);
+    } else {
+      fprintf(file, "ASSIGN_CONST %s = %d", instruction->dest->name,
+              instruction->val.const_int);
+    }
     break;
 
   case OP_Assign:
-    fprintf(file, "ASSIGN %s = %s", instruction->dest->name,
-            SRC1(instruction)->name);
+    if (instruction->dest->type == t_Addr) {
+      fprintf(file, "ASSIGN &%s = %s", instruction->dest->name,
+              SRC1(instruction)->name);
+    } else {
+      fprintf(file, "ASSIGN %s = %s", instruction->dest->name,
+              SRC1(instruction)->name);
+    }
     break;
 
   case OP_Param: {
@@ -132,13 +142,13 @@ void print_instruction(inode *instruction, FILE *file) {
     break;
 
   case OP_Index_Array:
-    fprintf(file, "ARRAY_INDEX %s -> %s", SRC1(instruction)->name,
-            instruction->dest->name);
+    fprintf(file, "ARRAY_INDEX %s = &%s[%s]", instruction->dest->name,
+            SRC2(instruction)->name, SRC1(instruction)->name);
     break;
 
   case OP_Deref:
-    fprintf(file, "DEREF %s -> %s", SRC1(instruction)->name,
-            instruction->dest->name);
+    fprintf(file, "DEREF %s = *%s", instruction->dest->name,
+            SRC1(instruction)->name);
     break;
 
   default:
@@ -188,7 +198,11 @@ void fill_backward_connections(inode *instructions_head) {
 }
 
 bool redefines_variable(inode *instruction) {
-  return instruction->dest != NULL;
+  // If the instruction is an assignment of a memory address, it does not
+  // change the variable that holds the memory address. That value is only
+  // changed if the instruction is of type OP_Index_Array.
+  return instruction->dest != NULL && (instruction->dest->type != t_Addr ||
+                                       instruction->op_type == OP_Index_Array);
 }
 
 bool is_rhs_variable(inode *instruction) {

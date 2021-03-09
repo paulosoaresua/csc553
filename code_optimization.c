@@ -238,7 +238,14 @@ bool remove_dead_instructions() {
       set rhs_set = create_empty_set(n);
 
       if (curr_instruction->dest && curr_instruction->dest->scope == Local) {
-        add_to_set(curr_instruction->dest->id, lhs_set);
+        if (curr_instruction->dest->type == t_Addr) {
+          // In this scenario, we consider that the LHS variable is being used
+          // as it contains the address of the variable that it's effectively
+          // going to change.
+          add_to_set(curr_instruction->dest->id, rhs_set);
+        } else {
+          add_to_set(curr_instruction->dest->id, lhs_set);
+        }
       }
 
       if (is_rhs_variable(curr_instruction)) {
@@ -255,8 +262,14 @@ bool remove_dead_instructions() {
           curr_instruction->dest->scope == Local) {
         if (!does_elto_belong_to_set(curr_instruction->dest->id,
                                      live_instructions)) {
-          curr_instruction->dead = true;
-          dead_instructions_found = true;
+//          if (curr_instruction->op_type != OP_Assign ||
+//              curr_instruction->dest->type != t_Addr) {
+            // Any update in an array is treated as a usage of the array since
+            // it changes the content of it. If changed inside a function, it
+            // should affect the results outside of that function.
+            curr_instruction->dead = true;
+            dead_instructions_found = true;
+//          }
         }
       }
 

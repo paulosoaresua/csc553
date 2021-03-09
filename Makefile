@@ -14,7 +14,13 @@ CFILES = error.c \
 	y.tab.c\
 	instruction.c\
 	code_generation.c\
-	code_translation.c
+	code_translation.c\
+	code_optimization.c\
+	control_flow.c\
+	liveness_analysis.c\
+	reaching_definitions_analysis.c\
+	set.c\
+	block.c\
 
 OFILES = error.o \
 	lex.yy.o \
@@ -26,7 +32,13 @@ OFILES = error.o \
 	y.tab.o\
 	instruction.o\
     code_generation.o\
-    code_translation.o
+    code_translation.o\
+    code_optimization.o\
+    control_flow.o\
+    liveness_analysis.o\
+    reaching_definitions_analysis.o\
+    set.o\
+    block.o\
 
 .c.o :
 	$(CC) $(CFLAGS) -c $<
@@ -40,13 +52,25 @@ main.o : global.h main.c code_translation.c
 
 symbol-table.o : global.h symbol-table.h symbol-table.c
 
-syntax-tree.o : global.h instruction.h syntax-tree.h syntax-tree.c
+syntax-tree.o : global.h instruction.h syntax-tree.h syntax-tree.c set.h
 
-instruction.o : global.h symbol-table.c instruction.c
+instruction.o : global.h symbol-table.c instruction.c block.c
 
 code_generation.o : syntax-tree.c protos.h instruction.c
 
-code_translation.o : syntax-tree.c protos.h instruction.c
+code_translation.o : syntax-tree.c protos.h code_translation.c instruction.c
+
+code_optimization.o : liveness_analysis.c reaching_definitions_analysis.c
+
+control_flow.o : instruction.c protos.h syntax-tree.c
+
+block.o : block.c
+
+set.o : set.c
+
+reaching_definition_analysis.o: reaching_definitions_analysis.c control_flow.c
+
+liveness_analysis.o : control_flow.c
 
 util.o : global.h util.h util.c
 

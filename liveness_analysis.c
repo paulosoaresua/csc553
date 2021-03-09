@@ -55,7 +55,7 @@ void find_def_and_use_sets(blist_node *block_list_head) {
     inode *curr_instruction = block_list_node->block->last_instruction;
     while (curr_instruction &&
            curr_instruction->block == block_list_node->block) {
-      if(curr_instruction->dead) {
+      if (curr_instruction->dead) {
         curr_instruction = curr_instruction->previous;
         continue;
       }
@@ -63,9 +63,16 @@ void find_def_and_use_sets(blist_node *block_list_head) {
       set lhs_set = create_empty_set(n);
       set rhs_set = create_empty_set(n);
 
+      // Globals are always live
       if (curr_instruction->dest && curr_instruction->dest->scope == Local) {
-        // Globals are always live
-        add_to_set(curr_instruction->dest->id, lhs_set);
+        if (curr_instruction->dest->type == t_Addr) {
+          // In this scenario, we consider that the LHS variable is being used
+          // as it contains the address of the variable that it's effectively
+          // going to change.
+          add_to_set(curr_instruction->dest->id, rhs_set);
+        } else {
+          add_to_set(curr_instruction->dest->id, lhs_set);
+        }
       }
 
       if (is_rhs_variable(curr_instruction)) {

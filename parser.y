@@ -203,6 +203,7 @@ id_decl
       stptr->elt_type = CurrType;
       stptr->num_elts = $3;
       collect_global(stptr);
+      fill_id(stptr);
     }
   }
   ;
