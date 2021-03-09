@@ -44,7 +44,7 @@ OFILES = error.o \
 	$(CC) $(CFLAGS) -c $<
 
 $(DEST) : $(OFILES)
-	$(CC) -o $(DEST) $(OFILES) -ll
+	$(CC) -o $(DEST) $(OFILES) -ll -lm
 
 error.o : error.h global.h syntax-tree.h error.c y.tab.h
 
