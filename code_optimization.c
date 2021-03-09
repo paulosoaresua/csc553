@@ -163,13 +163,15 @@ void do_copy_propagation() {
       }
 
       if (is_rhs_variable(curr_instruction)) {
-        if (curr_instruction->op_type == OP_Assign) {
+        if (curr_instruction->op_type == OP_Assign &&
+            curr_instruction->dest->type == SRC1(curr_instruction)->type) {
           // We make the LHS variable point to the RHS variable.
           if (SRC1(curr_instruction)->copied_from) {
             // LHS points to another variable (the original variable
             // propagated). We make LHS point to the original as well.
             attach_variable_to_original(curr_instruction->dest,
                                         SRC1(curr_instruction)->copied_from);
+
           } else {
             attach_variable_to_original(curr_instruction->dest,
                                         SRC1(curr_instruction));
@@ -318,16 +320,16 @@ static void print_3addr_instructions(inode *instruction_head) {
   inode *curr_instruction = instruction_head;
   bnode *curr_block;
   while (curr_instruction) {
+    if (curr_instruction->dead || curr_instruction->op_type == OP_Global) {
+      curr_instruction = curr_instruction->next;
+      continue;
+    }
+
     if (curr_instruction->block != curr_block) {
       curr_block = curr_instruction->block;
       fprintf(file_3addr, "\n-----------\n");
       fprintf(file_3addr, " Block %d    \n", curr_block->id);
       fprintf(file_3addr, "-----------  \n");
-    }
-
-    if (curr_instruction->dead || curr_instruction->op_type == OP_Global) {
-      curr_instruction = curr_instruction->next;
-      continue;
     }
 
     fprintf(file_3addr, "%d: ", curr_instruction->order);
