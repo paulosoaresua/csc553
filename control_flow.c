@@ -29,6 +29,12 @@ void find_block_leaders(inode *instruction_head) {
   inode *curr_instruction = instruction_head;
 
   while (curr_instruction) {
+    if(curr_instruction->op_type == OP_Global) {
+      // Ignore Global variables declaration
+      curr_instruction = curr_instruction->next;
+      continue;
+    }
+
     curr_instruction->order =
         total_instructions++; // Unique id for the instruction (it
     // represents the order of the instruction in the list of instructions)
@@ -89,6 +95,12 @@ void update_blocks(inode *instruction_head) {
     curr_instruction = curr_instruction->next;
 
     while (curr_instruction) {
+      if(curr_instruction->op_type == OP_Global) {
+        // Ignore Global variables declaration
+        curr_instruction = curr_instruction->next;
+        continue;
+      }
+
       if (!curr_instruction->block) {
         curr_instruction->block = curr_block;
       } else {
@@ -99,8 +111,10 @@ void update_blocks(inode *instruction_head) {
           // We don'' connect if the previous instruction was a jump to the
           // current one as this was already handled by the previous
           // instruction.
-          connect_blocks(curr_instruction->previous->block,
-                         curr_instruction->block);
+          if(curr_instruction->previous->block) {
+            connect_blocks(curr_instruction->previous->block,
+                           curr_instruction->block);
+          }
         }
         curr_block = curr_instruction->block;
       }
@@ -186,13 +200,13 @@ set get_dominators_from_predecessors(bnode *block) {
   return set;
 }
 
-void print_control_flow_graph() {
+void print_control_flow_graph(FILE* file) {
   blist_node *block_list_head = get_all_blocks();
   blist_node *block_list_node = block_list_head;
 
   while (block_list_node) {
     printf("Block %d [Leader: ", block_list_node->block->id);
-    print_instruction(block_list_node->block->first_instruction);
+    print_instruction(block_list_node->block->first_instruction, file);
     printf("] -> ");
     blist_node *block_list_child = block_list_node->block->children;
     while (block_list_child) {

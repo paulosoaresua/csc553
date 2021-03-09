@@ -58,4 +58,10 @@ set intersect_sets(set set1, set set2);
 
 set diff_sets(set set1, set set2);
 
+set clone_set(set original_set);
+
+bool is_set_empty(set set);
+
+bool does_elto_belong_to_set(int elto, set set);
+
 #endif

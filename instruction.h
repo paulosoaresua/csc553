@@ -64,6 +64,7 @@ typedef struct Instruction {
   int definition_id; // Unique ID for each instruction that assigns to a
   // variable
   bnode *block;
+  bool dead;
 
 } inode;
 
@@ -158,8 +159,9 @@ inode *create_jump_instruction(inode *destiny_instruction);
  * Print 3-addr code instruction
  *
  * @param instruction: instruction
+ * @param file: file to print the instruction to
  */
-void print_instruction(inode *instruction);
+void print_instruction(inode *instruction, FILE* file);
 
 #define SRC1(x) (x)->val.op_members.src1
 #define SRC2(x) (x)->val.op_members.src2
@@ -191,5 +193,11 @@ void invert_boolean_operator(inode *instruction);
  * @return
  */
 bool redefines_variable(inode* instruction);
+
+/**
+ * Checks whether the instruction is one of a kind that has a variable as RHS. *
+ * @return
+ */
+bool is_rhs_variable();
 
 #endif // CSC553_INSTRUCTION_H

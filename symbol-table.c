@@ -444,6 +444,12 @@ symtabnode **get_symbol_table_entries(int scope) { return SymTab[scope]; }
 
 int get_symbol_table_size() { return HASHTBLSZ; }
 
+/*********************************************************************
+ *                                                                   *
+ *                           for optimization                        *
+ *                                                                   *
+ *********************************************************************/
+
 void fill_id(symtabnode* node) {
   if(node->scope == Local) {
     node->id = local_var_id++;
@@ -452,6 +458,44 @@ void fill_id(symtabnode* node) {
 
 int get_total_local_variables() {
   return local_var_id;
+}
+
+var_list_node*add_to_list_of_variables(symtabnode* var, var_list_node* list_head) {
+  var_list_node *new_head = zalloc(sizeof(var_list_node));
+  new_head->var = var;
+  if (list_head) {
+    new_head->next = list_head;
+  }
+
+  return new_head;
+}
+
+var_list_node*remove_from_list_of_variables(symtabnode* var, var_list_node* list_head) {
+  var_list_node *new_head = list_head;
+
+  if (list_head->var == var) {
+    new_head = list_head->next;
+    free(list_head);
+  } else {
+    var_list_node* list_node = list_head;
+    while (list_node->next && list_node->next->var != var) {
+      list_node = list_node->next;
+    }
+    var_list_node *tmp = list_node->next;
+    list_node->next = list_node->next->next;
+    free(tmp);
+  }
+
+  return new_head;
+}
+
+void clear_list_of_variables(var_list_node* list_head) {
+  var_list_node *list_node = list_head;
+  while (list_node) {
+    var_list_node *next = list_node->next;
+    free(list_node);
+    list_node = next;
+  }
 }
 
 /*********************************************************************

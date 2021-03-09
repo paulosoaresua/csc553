@@ -26,6 +26,11 @@ void print_instructions(tnode *node) {
   inode *curr_instruction = node->code_head;
 
   while (curr_instruction) {
+    if (curr_instruction->dead) {
+      curr_instruction = curr_instruction->next;
+      continue;
+    }
+
     switch (curr_instruction->op_type) {
     case OP_Global: {
       if (!last_instruction || last_instruction->op_type != OP_Global) {
@@ -81,17 +86,22 @@ void print_instructions(tnode *node) {
     }
 
     case OP_Assign_Int:
-      printf("\n");
-      printf("  # OP_Assign_Int \n");
-      load_int_to_register(curr_instruction->val.const_int, "$t0");
-      store_at_memory(curr_instruction->dest, "$t0");
-      break;
-
     case OP_Assign_Char:
       printf("\n");
-      printf("  # OP_Assign_Char \n");
+      if(curr_instruction->op_type == OP_Assign_Int) {
+        printf("  # OP_Assign_Int \n");
+      } else{
+        printf("  # OP_Assign_Char \n");
+      }
+
       load_int_to_register(curr_instruction->val.const_int, "$t0");
-      store_at_memory(curr_instruction->dest, "$t0");
+      if (curr_instruction->dest->type == t_Addr) {
+        load_to_register(curr_instruction->dest, "$t1", t_Word);
+        char mem_op_type = get_mem_op_type(curr_instruction->dest->elt_type);
+        printf("  s%c $t0, 0($t1) \n", mem_op_type);
+      } else {
+        store_at_memory(curr_instruction->dest, "$t0");
+      }
       break;
 
     case OP_Assign:
@@ -117,14 +127,12 @@ void print_instructions(tnode *node) {
     case OP_Param: {
       printf("\n");
       printf("  # OP_Param       \n");
-      if (SRC1(curr_instruction)->formal) {
+      if (SRC1(curr_instruction)->formal &&
+          SRC1(curr_instruction)->type == t_Addr) {
+
         // When a function passes one of its formal to another, just copy
-        // the whole word if its not a char
-        if (SRC1(curr_instruction)->type == t_Char) {
-          load_to_register(SRC1(curr_instruction), "$t0", t_Char);
-        } else {
-          load_to_register(SRC1(curr_instruction), "$t0", t_Word);
-        }
+        // the whole word if it stores a memory address
+        load_to_register(SRC1(curr_instruction), "$t0", t_Word);
       } else {
         load_to_register(SRC1(curr_instruction), "$t0",
                          SRC1(curr_instruction)->type);

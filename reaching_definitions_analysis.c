@@ -7,9 +7,9 @@
 
 static void find_gen_and_kill_sets(blist_node *block_list_head);
 static void fill_definitions(blist_node *block_list_head);
-//static void clear_definitions_within_block(bnode *block);
 static set get_out_set_from_predecessors(bnode *block);
-static void clear_static_block_sets(blist_node *block_list_head);
+static void clear_gen_and_kill_sets(blist_node *block_list_head);
+void clear_definitions_in_block(bnode *block);
 
 void find_in_and_out_def_sets(blist_node *block_list_head) {
   find_gen_and_kill_sets(block_list_head);
@@ -24,10 +24,6 @@ void find_in_and_out_def_sets(blist_node *block_list_head) {
       set diff = diff_sets(in, block_list_node->block->kill);
       set out = unify_sets(block_list_node->block->gen, diff);
 
-      if (!are_set_equals(block_list_node->block->in, in)) {
-        block_list_node->block->in = in;
-        converged = false;
-      }
       if (!are_set_equals(block_list_node->block->out, out)) {
         block_list_node->block->out = out;
         converged = false;
@@ -37,7 +33,7 @@ void find_in_and_out_def_sets(blist_node *block_list_head) {
   }
 
   // No need to retain gen, kill and definitions after in and out were computed.
-  clear_static_block_sets(block_list_head);
+  clear_gen_and_kill_sets(block_list_head);
 }
 
 /**
@@ -57,6 +53,11 @@ void find_gen_and_kill_sets(blist_node *block_list_head) {
     inode *curr_instruction = block_list_node->block->first_instruction;
     while (curr_instruction &&
            curr_instruction->block == block_list_node->block) {
+      if (curr_instruction->dead) {
+        curr_instruction = curr_instruction->next;
+        continue;
+      }
+
       if (redefines_variable(curr_instruction)) {
         gen = diff_sets(gen, curr_instruction->dest->definitions);
         add_to_set(curr_instruction->definition_id, gen);
@@ -66,10 +67,11 @@ void find_gen_and_kill_sets(blist_node *block_list_head) {
       curr_instruction = curr_instruction->next;
     }
 
-    //    clear_definitions_within_block(block_list_node->block);
     block_list_node->block->gen = gen;
-    block_list_node->block->out = gen;
     block_list_node->block->kill = kill;
+    block_list_node->block->in = create_empty_set(n);
+    block_list_node->block->out = gen;
+
     block_list_node = block_list_node->next;
   }
 }
@@ -78,14 +80,15 @@ void find_gen_and_kill_sets(blist_node *block_list_head) {
  * Fills the set of definitions among all instructions for each assigned
  * variable.
  *
- * @param block: block
+ * @param block_list_head: head of the list of blocks
  */
 void fill_definitions(blist_node *block_list_head) {
   blist_node *block_list_node = block_list_head;
 
   while (block_list_node) {
     inode *curr_instruction = block_list_node->block->first_instruction;
-    while (curr_instruction && curr_instruction->block == block_list_node->block) {
+    while (curr_instruction &&
+           curr_instruction->block == block_list_node->block) {
       if (redefines_variable(curr_instruction)) {
         if (is_set_undefined(curr_instruction->dest->definitions)) {
           curr_instruction->dest->definitions =
@@ -100,25 +103,6 @@ void fill_definitions(blist_node *block_list_head) {
     block_list_node = block_list_node->next;
   }
 }
-
-///**
-// * Erases the set of definitions for each assigned variable within a block.
-// *
-// * @param block: block
-// */
-//void clear_definitions_within_block(bnode *block) {
-//  inode *curr_instruction = block->first_instruction;
-//  while (curr_instruction && curr_instruction->block == block) {
-//    if (curr_instruction->op_type == OP_Assign_Int ||
-//        curr_instruction->op_type == OP_Assign_Char ||
-//        curr_instruction->op_type == OP_Assign) {
-//
-//      set null_set;
-//      curr_instruction->dest->definitions = null_set;
-//    }
-//    curr_instruction = curr_instruction->next;
-//  }
-//}
 
 /**
  * Gets the union of all reaching variables in the end of the predecessors of
@@ -150,13 +134,30 @@ static set get_out_set_from_predecessors(bnode *block) {
  *
  * @param root_block: first block of a function.
  */
-void clear_static_block_sets(blist_node *block_list_head) {
+void clear_gen_and_kill_sets(blist_node *block_list_head) {
   blist_node *block_list_node = block_list_head;
   set null_set;
 
   while (block_list_node) {
+    clear_definitions_in_block(block_list_node->block);
     block_list_node->block->gen = null_set;
     block_list_node->block->kill = null_set;
     block_list_node = block_list_node->next;
+  }
+}
+
+/**
+ * Clears the set of instructions a variable if defined.
+ *
+ * @param block: block to scan.
+ */
+void clear_definitions_in_block(bnode *block) {
+  set null_set;
+  inode *curr_instruction = block->first_instruction;
+  while (curr_instruction && curr_instruction->block == block) {
+    if (curr_instruction->dest) {
+      curr_instruction->dest->definitions = null_set;
+    }
+    curr_instruction = curr_instruction->next;
   }
 }

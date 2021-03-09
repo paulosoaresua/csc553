@@ -12,6 +12,11 @@
 #define Global 0
 #define Local  1
 
+typedef struct VarListNode {
+  struct stblnode* var;
+  struct VarListNode* next;
+} var_list_node;
+
 typedef struct stblnode {
   char *name;
   int scope;
@@ -36,6 +41,8 @@ typedef struct stblnode {
   set definitions; // Set of other instructions withing a block where the
   // variable defined by an assignment instruction is redefined (it's only
   // used if the instruction is an assignment like one).
+  struct stblnode* copied_from; // Stored during copy propagation
+  var_list_node* copied_to; // List of variables
 } symtabnode;
 
 /*********************************************************************
@@ -134,5 +141,32 @@ void fill_id(symtabnode* node);
  * @return
  */
 int get_total_local_variables();
+
+/**
+ * Adds a variable to a list of variables.
+ *
+ * @param var: symbol table entry
+ * @param list_head: head of a list of variables
+ *
+ * @return head of the new list.
+ */
+var_list_node*add_to_list_of_variables(symtabnode* var, var_list_node* list_head);
+
+/**
+ * Removes a variable from a list of variables.
+ *
+ * @param var: symbol table entry
+ * @param list_head: head of a list of variables
+ *
+ * @return head of the new list.
+ */
+var_list_node*remove_from_list_of_variables(symtabnode* var, var_list_node* list_head);
+
+/**
+ * Frees pointers in a list of variables.
+ *
+ * @param list_head: head of a list of variables
+ */
+void clear_list_of_variables(var_list_node* list_head);
 
 #endif /* _SYMBOL_TABLE_H_ */

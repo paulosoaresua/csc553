@@ -19,6 +19,13 @@ void enable_local_optimization();
 void enable_global_optimization();
 
 /**
+ * Print blocks and instructions.
+ *
+ * @param file: file where the instructions must be printed
+ */
+void print_blocks_and_instructions(FILE* file);
+
+/**
  * Optimize code.
  *
  * @param function_body: first syntax-tree node of the current parsed function body.

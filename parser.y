@@ -107,7 +107,7 @@ prog
        generate_function_code(currFun, currfnbodyTree, 1);
        process_allocations(currFun);
        optimize_instructions(currfnbodyTree);
-       //print_instructions(currfnbodyTree);
+       print_instructions(currfnbodyTree);
 
       CleanupFnInfo(); 
     }

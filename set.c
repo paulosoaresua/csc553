@@ -87,3 +87,27 @@ set diff_sets(set set1, set set2) {
 
   return new_set;
 }
+
+set clone_set(set original_set) {
+  set cloned_set = create_empty_set(original_set.max_size);
+  cloned_set = unify_sets(cloned_set, original_set);
+
+  return cloned_set;
+}
+
+bool is_set_empty(set set) {
+  for(int i = 0; i < set.num_partitions; i++) {
+    if(set.mask[i] != 0) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool does_elto_belong_to_set(int elto, set set) {
+  int partition = elto / BITS_PER_PARTITION;
+  int pos_in_partition = elto % BITS_PER_PARTITION;
+  int elto_mask = (1 << pos_in_partition);
+  return (set.mask[partition] & elto_mask) == elto_mask;
+}

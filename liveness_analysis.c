@@ -34,12 +34,12 @@ void find_in_and_out_liveness_sets(blist_node *block_list_head) {
     }
   }
 
-  // No need to retain gen and kill after in and out were computed.
-  //  clear_gen_and_kill_sets(block_list_head);
+  // No need to retain def and use sets after in and out were computed.
+  clear_def_and_use_sets(block_list_head);
 }
 
 /**
- * For each block, computes its gen and kill definition sets.
+ * For each block, computes its def and use definition sets.
  *
  * @param root_block: first block of a function.
  */
@@ -55,23 +55,25 @@ void find_def_and_use_sets(blist_node *block_list_head) {
     inode *curr_instruction = block_list_node->block->last_instruction;
     while (curr_instruction &&
            curr_instruction->block == block_list_node->block) {
+      if(curr_instruction->dead) {
+        curr_instruction = curr_instruction->previous;
+        continue;
+      }
 
       set lhs_set = create_empty_set(n);
       set rhs_set = create_empty_set(n);
 
-      if (curr_instruction->dest) {
+      if (curr_instruction->dest && curr_instruction->dest->scope == Local) {
+        // Globals are always live
         add_to_set(curr_instruction->dest->id, lhs_set);
       }
 
-      if (curr_instruction->op_type != OP_Assign_Int &&
-          curr_instruction->op_type != OP_Assign_Char &&
-          curr_instruction->op_type != OP_Call &&
-          curr_instruction->op_type != OP_Enter) {
-        if (SRC1(curr_instruction)) {
+      if (is_rhs_variable(curr_instruction)) {
+        if (SRC1(curr_instruction) && SRC1(curr_instruction)->scope == Local) {
           add_to_set(SRC1(curr_instruction)->id, rhs_set);
         }
 
-        if (SRC2(curr_instruction)) {
+        if (SRC2(curr_instruction) && SRC2(curr_instruction)->scope == Local) {
           add_to_set(SRC2(curr_instruction)->id, rhs_set);
         }
       }
@@ -85,8 +87,9 @@ void find_def_and_use_sets(blist_node *block_list_head) {
     }
 
     block_list_node->block->def = def;
-    block_list_node->block->in = use;
     block_list_node->block->use = use;
+    block_list_node->block->in = use;
+    block_list_node->block->out = create_empty_set(n);
     block_list_node = block_list_node->next;
   }
 }

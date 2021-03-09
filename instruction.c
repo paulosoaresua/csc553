@@ -13,6 +13,7 @@ inode *create_instruction(enum OpType i_type, symtabnode *src1,
   instruction->val.op_members.src1 = src1;
   instruction->val.op_members.src2 = src2;
   instruction->dest = dest;
+  instruction->dead = false;
 
   return instruction;
 }
@@ -68,73 +69,76 @@ inode *create_jump_instruction(inode *destiny_instruction) {
   return instruction;
 }
 
-void print_instruction(inode *instruction) {
+void print_instruction(inode *instruction, FILE *file) {
   switch (instruction->op_type) {
   case OP_Global: {
-    printf("GLOBAL %s", SRC1(instruction)->name);
+    fprintf(file, "GLOBAL %s", SRC1(instruction)->name);
     break;
   }
   case OP_Enter: {
-    printf("ENTER %s", SRC1(instruction)->name);
+    fprintf(file, "ENTER %s", SRC1(instruction)->name);
     break;
   }
 
   case OP_Assign_Int:
   case OP_Assign_Char:
-    printf("ASSIGN_CONST %s = %d", instruction->dest->name,
-           instruction->val.const_int);
+    fprintf(file, "ASSIGN_CONST %s = %d", instruction->dest->name,
+            instruction->val.const_int);
     break;
 
   case OP_Assign:
-    printf("ASSIGN %s = %s", instruction->dest->name, SRC1(instruction)->name);
+    fprintf(file, "ASSIGN %s = %s", instruction->dest->name,
+            SRC1(instruction)->name);
     break;
 
   case OP_Param: {
-    printf("PARAM %s", SRC1(instruction)->name);
+    fprintf(file, "PARAM %s", SRC1(instruction)->name);
     break;
   }
 
   case OP_Call: {
-    printf("CALL %s", SRC1(instruction)->name);
+    fprintf(file, "CALL %s", SRC1(instruction)->name);
     break;
   }
 
   case OP_Return:
-    printf("RETURN");
+    fprintf(file, "RETURN");
     break;
 
   case OP_Retrieve:
-    printf("RETRIEVE %s", instruction->dest->name);
+    fprintf(file, "RETRIEVE %s", instruction->dest->name);
     break;
 
   case OP_UMinus:
-    printf("UMINUS %s", SRC1(instruction)->name);
+    fprintf(file, "UMINUS %s", SRC1(instruction)->name);
     break;
 
   case OP_BinaryArithmetic:
-    printf("BINARY_OPERATION %s = %s ? %s", instruction->dest->name,
-           SRC1(instruction)->name, SRC2(instruction)->name);
+    fprintf(file, "BINARY_OPERATION %s = %s ? %s", instruction->dest->name,
+            SRC1(instruction)->name, SRC2(instruction)->name);
     break;
 
   case OP_Label:
-    printf("LABEL %s", instruction->label);
+    fprintf(file, "LABEL %s", instruction->label);
     break;
 
   case OP_If:
-    printf("COND_JUMP %s ? %s", SRC1(instruction)->name,
-           SRC2(instruction)->name);
+    fprintf(file, "COND_JUMP %s ? %s", SRC1(instruction)->name,
+            SRC2(instruction)->name);
     break;
 
   case OP_Goto:
-    printf("JUMP %s", instruction->jump_to->label);
+    fprintf(file, "JUMP %s", instruction->jump_to->label);
     break;
 
   case OP_Index_Array:
-    printf("ARRAY_INDEX %s[]", SRC1(instruction)->name);
+    fprintf(file, "ARRAY_INDEX %s -> %s", SRC1(instruction)->name,
+            instruction->dest->name);
     break;
 
   case OP_Deref:
-    printf("DEREF \n");
+    fprintf(file, "DEREF %s -> %s", SRC1(instruction)->name,
+            instruction->dest->name);
     break;
 
   default:
@@ -184,12 +188,12 @@ void fill_backward_connections(inode *instructions_head) {
 }
 
 bool redefines_variable(inode *instruction) {
-  return instruction->op_type == OP_Assign_Int ||
-         instruction->op_type == OP_Assign_Char ||
-         instruction->op_type == OP_Assign ||
-         instruction->op_type == OP_UMinus ||
-         instruction->op_type == OP_BinaryArithmetic ||
-         instruction->op_type == OP_Retrieve ||
-         instruction->op_type == OP_Index_Array ||
-         instruction->op_type == OP_Deref;
+  return instruction->dest != NULL;
+}
+
+bool is_rhs_variable(inode *instruction) {
+  return SRC1(instruction) && instruction->op_type != OP_Assign_Int &&
+         instruction->op_type != OP_Assign_Char &&
+         instruction->op_type != OP_Call && instruction->op_type != OP_Enter &&
+         instruction->op_type != OP_Global;
 }
