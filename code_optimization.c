@@ -226,11 +226,12 @@ void optimize_globally() {
 }
 
 void do_dead_code_elimination() {
-  bool dead_instructions_found = true;
-  while (dead_instructions_found) {
-    find_in_and_out_liveness_sets(get_all_blocks());
-    dead_instructions_found = remove_dead_instructions();
-  }
+  find_in_and_out_liveness_sets(get_all_blocks());
+//  bool dead_instructions_found = true;
+//  while (dead_instructions_found) {
+//    find_in_and_out_liveness_sets(get_all_blocks());
+//    dead_instructions_found = remove_dead_instructions();
+//  }
 }
 
 bool remove_dead_instructions() {
