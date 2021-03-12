@@ -228,10 +228,8 @@ void optimize_globally() {
 void do_dead_code_elimination() {
   bool any_change = true;
   while (any_change) {
-    any_change = find_in_and_out_liveness_sets(get_all_blocks());
-    if(any_change) {
-      any_change = remove_dead_instructions();
-    }
+    find_in_and_out_liveness_sets(get_all_blocks());
+    any_change = remove_dead_instructions();
   }
 }
 

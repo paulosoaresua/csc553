@@ -9,11 +9,9 @@ static void find_def_and_use_sets(blist_node *block_list_head);
 static set get_in_set_from_sucessors(bnode *block);
 static void clear_def_and_use_sets(blist_node *block_list_head);
 
-bool find_in_and_out_liveness_sets(blist_node *block_list_head) {
+void find_in_and_out_liveness_sets(blist_node *block_list_head) {
   find_def_and_use_sets(block_list_head);
   bool converged = false;
-  bool any_change = false;
-  find_def_and_use_sets(block_list_head);
   while (!converged) {
     converged = true;
     blist_node *block_list_node = block_list_head;
@@ -25,12 +23,10 @@ bool find_in_and_out_liveness_sets(blist_node *block_list_head) {
       if (!are_set_equals(block_list_node->block->out, out)) {
         block_list_node->block->out = out;
         converged = false;
-        any_change = true;
       }
       if (!are_set_equals(block_list_node->block->in, in)) {
         block_list_node->block->in = in;
         converged = false;
-        any_change = true;
       }
       block_list_node = block_list_node->next;
     }
@@ -38,8 +34,6 @@ bool find_in_and_out_liveness_sets(blist_node *block_list_head) {
 
   // No need to retain def and use sets after in and out were computed.
   clear_def_and_use_sets(block_list_head);
-
-  return any_change;
 }
 
 /**
