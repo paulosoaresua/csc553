@@ -5,15 +5,15 @@
 
 #include "liveness_analysis.h"
 
-static bool find_def_and_use_sets(blist_node *block_list_head, bool mark_dead);
+static void find_def_and_use_sets(blist_node *block_list_head);
 static set get_in_set_from_sucessors(bnode *block);
 static void clear_def_and_use_sets(blist_node *block_list_head);
 
-void find_in_and_out_liveness_sets(blist_node *block_list_head) {
-//  find_def_and_use_sets(block_list_head);
+bool find_in_and_out_liveness_sets(blist_node *block_list_head) {
+  find_def_and_use_sets(block_list_head);
   bool converged = false;
-  bool mark_dead = false;
-  find_def_and_use_sets(block_list_head, false);
+  bool any_change = false;
+  find_def_and_use_sets(block_list_head);
   while (!converged) {
     converged = true;
     blist_node *block_list_node = block_list_head;
@@ -25,18 +25,21 @@ void find_in_and_out_liveness_sets(blist_node *block_list_head) {
       if (!are_set_equals(block_list_node->block->out, out)) {
         block_list_node->block->out = out;
         converged = false;
+        any_change = true;
       }
       if (!are_set_equals(block_list_node->block->in, in)) {
         block_list_node->block->in = in;
         converged = false;
+        any_change = true;
       }
       block_list_node = block_list_node->next;
     }
-    converged = converged && !find_def_and_use_sets(block_list_head, true);
   }
 
   // No need to retain def and use sets after in and out were computed.
   clear_def_and_use_sets(block_list_head);
+
+  return any_change;
 }
 
 /**
@@ -44,18 +47,14 @@ void find_in_and_out_liveness_sets(blist_node *block_list_head) {
  *
  * @param root_block: first block of a function.
  */
-bool find_def_and_use_sets(blist_node *block_list_head, bool mark_dead) {
+void find_def_and_use_sets(blist_node *block_list_head) {
   blist_node *block_list_node = block_list_head;
   // Global variables are always live
   int n = get_total_local_variables();
-  bool block_changed = false;
 
   while (block_list_node) {
     set def = create_empty_set(n);
     set use = create_empty_set(n);
-    if (mark_dead) {
-      use = block_list_node->block->out;
-    }
 
     inode *curr_instruction = block_list_node->block->last_instruction;
     while (curr_instruction &&
@@ -99,16 +98,6 @@ bool find_def_and_use_sets(blist_node *block_list_head, bool mark_dead) {
         }
       }
 
-      if(mark_dead) {
-        if (redefines_variable(curr_instruction) &&
-            curr_instruction->dest->scope == Local) {
-          if (!does_elto_belong_to_set(curr_instruction->dest->id, use)) {
-            curr_instruction->dead = true;
-            block_changed = true;
-          }
-        }
-      }
-
       def = unify_sets(lhs_set, def);
       def = diff_sets(def, rhs_set);
       use = diff_sets(use, lhs_set);
@@ -119,14 +108,10 @@ bool find_def_and_use_sets(blist_node *block_list_head, bool mark_dead) {
 
     block_list_node->block->def = def;
     block_list_node->block->use = use;
-    if(!mark_dead) {
-      block_list_node->block->in = use;
-      block_list_node->block->out = create_empty_set(n);
-    }
+    block_list_node->block->in = use;
+    block_list_node->block->out = create_empty_set(n);
     block_list_node = block_list_node->next;
   }
-
-  return block_changed;
 }
 
 /**

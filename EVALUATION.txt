@@ -1,67 +1,212 @@
-README
+-----------------------------
+| OPTIMIZATIONS IMPLEMENTED |
+-----------------------------
 
-# Peephole Optimizations
+1. Peephole
 
-1. **Removing jump to next instruction.**
+Below are the kinds of patterns I found in the generated code that can be
+optimized by a peephole strategy.
 
-   The last boolean expression term of a conditional in a loop, always generate instructions like
+a) Jump to next instruction
 
-   ```assembly
-   goto _L1
-   _L1:
-   ...
-   ```
+The code generation for boolean expressions was implemented recursively,
+passing a "true" and "false" label to jump to. Because the loop evaluation is
+the last instruction in a block, we always get the following pattern
 
-   This is because if any of the terms evaluate to false, the program must leave the loop.
+COND_JUMP i > _tmp1 -> L0
+JUMP L2
+LABEL L2
 
-   **Solution:** Unconditional jump instructions are removed whenever its destiny label is the next instruction to be executed.
+where L0 is the label in the loop body's header. Therefore, there'' an
+unnecessary jump to the next instruction that can be safely removed.
 
-   **Statistics:** 1 less branch per loop instruction.
+This optimization results in 1 less branch instruction per loop instruction (not
+ iteration).
+
+b) Jump after conditionals
+
+The code generated for a conditional instruction is typically as follows
+
+COND_JUMP _tmp0 > _tmp1 -> L0
+JUMP L2
+LABEL L0
+
+We can get rid of the jump in the second line by changing the boolean operator
+in the COND_JUMP instruction and jumping to L2 in case of success. The example
+above after this optimization would then be
+
+COND_JUMP _tmp0 <= _tmp1 -> L2
+LABEL L0
+
+This optimization results in 1 less branch instruction per conditional
+instruction, regardless of the existence of an "else" statement or not.
+
+c) Null and duplicate assignments
+
+Immediate duplicate assignment instructions and assignments to the same variable
+ are removed by this optimization.
+
+This optimization results in 1 less read and write instruction per null or
+duplicate immediate assignment instructions.
+
+Duplicate assignments that are not immediately after one another are not removed
+ by this optimization.
+
+d) Immediate temporaries
+
+The usage of temporary was widely used for code generation, which produces a
+series of instructions where a value is assigned to a temporary and the next
+immediate instruction assigns this temporary to a local/global variable. For
+instance,
+
+ASSIGN _tmp0 = constant(1)
+ASSIGN x = _tmp0
+
+This optimization removes these temporary allocations by assigning the RHS
+directly to the variable of interest
+
+ASSIGN x = constant(1)
+
+This kind of copy is however constrained to temporary variables. The
+instructions below won't be optimized by this approach as x is not a temporary.
+ These kind of instructions will be handled by the copy propagation optimization
+ instead.
+
+ASSIGN x = constant(1)
+ASSIGN y = x
+
+One could argue that copy propagation will already handle this issue, and,
+therefore, it is redundant to do this as a peephole optimization. However, copy
+ propagation only works on ASSIGN instructions and this peephole optimization is
+ more general. Consider the following code snippet
+
+ASSIGN _tmp0 = constant(1)
+ASSIGN x = _tmp0
+ASSIGN _tmp0 = constant(2)
+ASSIGN y = _tmp0
+BINARY_OPERATION _tmp0 = x ? y
+ASSIGN z = _tmp0
+
+Copy propagation will eliminate the temporaries in the ASSIGN instructions but
+not the one involved in the BINARY_OPERATION instruction. This peephole
+optimization, on the other hand, gives us the following optimized code
+
+ASSIGN x = constant(1)
+ASSIGN y = constant(2)
+BINARY_OPERATION z = x ? y
+
+This optimization results in 1 less read and write instructions per any
+instruction that contains a variable definition. They are:
+
+ASSIGN
+BINARY_OPERATION
+UMINUS
+RETRIEVE
+DEREF
+
+2. Copy Propagation
+
+The copy propagation optimization implemented here copies constants or
+variables to other variables via the transitivity property of assignment
+operations.
+
+We do not propagate a copy if the LHS variable type is different from the RHS
+variable type and the RHS type is different from the original variable type, as
+this could bypass type conversion. For instance,
+
+int x, y;
+char z;
+
+x = 255;
+z = x;
+y = z;
+
+In this example, since y's type is different from z's type and z's type is
+different from 255's type, we do not copy 255 to y.
+
+Copy propagation, per se, typically do not remove instructions, but it creates
+instructions that will be detected as dead by liveness analysis. However,
+there's a simple pattern that can be immediately removed and this implementation
+ covers it: we remove assignment instructions if the LHS and RHS map to the
+ same variable. For instance,
+
+int x, y, z
+
+x = randint();
+y = x;
+z = y;
+x = z;
+
+Since both x and z map to x, we mark the last instruction as dead when doing
+copy propagation.
+
+3. Liveness analysis and dead code elimination
+
+This optimization performs linveness analysis over the basic blocks and, if any
+change is detected in the in/out sets, the elimination process proceeds by
+analysing the blocks backwards to find dead instructions. This process repeats
+until no more changes are detected.
+
+--------------------------
+| ORDER OF OPTIMIZATIONS |
+--------------------------
+
+For local optimization, I chose to run peephold followed by copy
+propagation. While the order of optimization does not affect the final reduction
+ in number of executed instruction, by doing peephole first, we reduce the
+ number of copies to keep track of in the copy propagation due to temporary
+ assignments.
+
+If local and global optimizations are required, local optimization is performed
+first as copy propagation and peephole can give birth to dead code, that can be
+then eliminated by dead code elimination.
+
+--------------------------
+| IMPLEMENTATION DETAILS |
+--------------------------
+
+In code propagation, I only keep track of the original variable in the the
+chain, therefore, I don't need to keep track of a list of copies when replacing
+the RHS variable in an assignment with the variable it was copied from. For
+instance,
+
+x = randint();
+y = x;
+z = y;
+x = z;
+
+is implemented like
+
+x.copied_from = NULL;
+y.copied_from = x;
+z.copied_from = y.copied_from = x;
+x.copied_from = z.copied_from = x; // Marked dead by copy propagation null
+								   // assignment detection
+
+Next, in liveness analysis, once the in and out sets are found, I erase the
+def/use sets in the blocks to save memory space.
+
+Finally, I used bit array to implement a set. I represent a bit array using an
+integer, therefore, each set partition can hold up to 32 bits. A set can have up
+ to 2^64 partitions and, thus, up to 32*(2^64) elements.
+
+---------------
+| Experiments |
+---------------
+
+1. Program 1
+
+2. Program 2
+
+3. Program 3
+
+4. Program 4
+
+5. Program 5
 
 
 
-2. **Removing jump after conditionals. **
-
-   Consider the following set of instructions typically generated for evaluation of conditionals.
-
-   ```assembly
-   # Before optimization
-   if x < 5 goto _L0
-   goto _L1
-   _L0:
-   ```
-
-   We can get rid of the jump in line 3 by changing the boolean operator in line 2.
-
-   **Solution:** Whenever the pattern above is found, the boolean operator of the conditional jump is changed to its inverse, and its label is replaced by the one in the subsequent unconditional jump.
-
-   ```assembly
-   # After optimization
-   if x >= 5 goto _L0
-   _L0:
-   ```
-
-   **Statistics:** 1 less branch per conditional instruction.
 
 
 
-3. **Copying constants to final variable.**
 
-   Consider the following set of instructions typically generated for constant assignments.
-
-   ```assembly
-   # Before optimization
-   _tmp0 = 1
-   x = _tmp0
-   ```
-
-   We can get read of the two intermediary instructions by setting 1 directly into the address of x.
-
-   **Solution:** Whenever a constant integer/char is assigned to a temporary variable and this variable is immediately assigned to x, the constant is saved directly in x instead. Note: cases not involving temporaries are handled by the intra-block copy propagation optimization method.
-
-   ```assembly
-   # After optimization
-   x = 1
-   ```
-
-   **Statistics:** 1 less read and write per constant assignment instruction.
