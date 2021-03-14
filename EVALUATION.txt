@@ -17,7 +17,7 @@ COND_JUMP i > _tmp1 -> L0
 JUMP L2
 LABEL L2
 
-where L0 is the label in the loop body's header. Therefore, there'' an
+where L0 is the label in the loop body's header. Therefore, there's an
 unnecessary jump to the next instruction that can be safely removed.
 
 This optimization results in 1 less branch instruction per loop instruction (not
@@ -31,7 +31,7 @@ COND_JUMP _tmp0 > _tmp1 -> L0
 JUMP L2
 LABEL L0
 
-We can get rid of the jump in the second line by changing the boolean operator
+We can get rid of the jump in the second line by inverting the boolean operator
 in the COND_JUMP instruction and jumping to L2 in case of success. The example
 above after this optimization would then be
 
@@ -39,18 +39,22 @@ COND_JUMP _tmp0 <= _tmp1 -> L2
 LABEL L0
 
 This optimization results in 1 less branch instruction per conditional
-instruction, regardless of the existence of an "else" statement or not.
+instruction, regardless of the existence of an "else" statement.
 
 c) Null and duplicate assignments
 
 Immediate duplicate assignment instructions and assignments to the same variable
- are removed by this optimization.
+ are removed by this optimization. For instance,
+
+ x = x; // Null assignment
+ x = y;
+ x = y; // Duplicate assignment
 
 This optimization results in 1 less read and write instruction per null or
 duplicate immediate assignment instructions.
 
-Duplicate assignments that are not immediately after one another are not removed
- by this optimization.
+Note: duplicate assignments that do not show up immediately after one another
+are not removed by this optimization.
 
 d) Immediate temporaries
 
@@ -75,7 +79,7 @@ instructions below won't be optimized by this approach as x is not a temporary.
 ASSIGN x = constant(1)
 ASSIGN y = x
 
-One could argue that copy propagation will already handle this issue, and,
+One could argue that copy propagation will already handle this case, and,
 therefore, it is redundant to do this as a peephole optimization. However, copy
  propagation only works on ASSIGN instructions and this peephole optimization is
  more general. Consider the following code snippet
@@ -87,8 +91,8 @@ ASSIGN y = _tmp0
 BINARY_OPERATION _tmp0 = x ? y
 ASSIGN z = _tmp0
 
-Copy propagation will eliminate the temporaries in the ASSIGN instructions but
-not the one involved in the BINARY_OPERATION instruction. This peephole
+Copy propagation will turn dead the ASSIGN instructions to temporaries
+but not the assignment in the BINARY_OPERATION instruction. This peephole
 optimization, on the other hand, gives us the following optimized code
 
 ASSIGN x = constant(1)
@@ -127,8 +131,9 @@ different from 255's type, we do not copy 255 to y.
 Copy propagation, per se, typically do not remove instructions, but it creates
 instructions that will be detected as dead by liveness analysis. However,
 there's a simple pattern that can be immediately removed and this implementation
- covers it: we remove assignment instructions if the LHS and RHS map to the
- same variable. For instance,
+ covers it: we remove assignment instructions if the LHS and the RHS map to the
+ same variable, where the definition of mapping is such that v maps to u if v
+  was copied from u, otherwise, v maps to itself. For instance,
 
 int x, y, z
 
@@ -142,10 +147,9 @@ copy propagation.
 
 3. Liveness analysis and dead code elimination
 
-This optimization performs linveness analysis over the basic blocks and, if any
-change is detected in the in/out sets, the elimination process proceeds by
-analysing the blocks backwards to find dead instructions. This process repeats
-until no more changes are detected.
+This optimization performs linveness analysis over the basic blocks and the
+elimination process proceeds by analysing the blocks backwards to find dead
+instructions. This process repeats until no more changes are detected.
 
 --------------------------
 | ORDER OF OPTIMIZATIONS |
@@ -158,14 +162,17 @@ propagation. While the order of optimization does not affect the final reduction
  assignments.
 
 If local and global optimizations are required, local optimization is performed
-first as copy propagation and peephole can give birth to dead code, that can be
-then eliminated by dead code elimination.
+first as copy propagation and peephole can give rise to dead code, that can be
+further removed by dead code elimination.
 
 --------------------------
 | IMPLEMENTATION DETAILS |
 --------------------------
 
-In code propagation, I only keep track of the original variable in the the
+In my implementation, a call to a function starts a new basic block that has
+this call instruction as a leader.
+
+Next, in code propagation, I only keep track of the original variable in the the
 chain, therefore, I don't need to keep track of a list of copies when replacing
 the RHS variable in an assignment with the variable it was copied from. For
 instance,
@@ -183,26 +190,142 @@ z.copied_from = y.copied_from = x;
 x.copied_from = z.copied_from = x; // Marked dead by copy propagation null
 								   // assignment detection
 
-Next, in liveness analysis, once the in and out sets are found, I erase the
-def/use sets in the blocks to save memory space.
+Furthermore, in liveness analysis, once the in and out sets are found, I erase
+the def/use sets in the blocks to save memory space.
 
 Finally, I used bit array to implement a set. I represent a bit array using an
-integer, therefore, each set partition can hold up to 32 bits. A set can have up
- to 2^64 partitions and, thus, up to 32*(2^64) elements.
+integer, therefore, each set partition can hold up to 32 elements. A set can
+have up to 2^64 partitions and, thus, up to 32*(2^64) elements.
 
 ---------------
 | Experiments |
 ---------------
 
-1. Program 1
+The programs used in this section are in the directory eval/.
 
-2. Program 2
+- Program 1
 
-3. Program 3
+This program explores the effect of peephole on code optimization. It contains
+each one of the instructions that can be optimized by the peephole approach.
+By suppressing copy propagation, we can see that all credits on the reduction
+of number of write and branch instructions goes to peephole in this
+sample program. Here are the results reported by spim before and after
+optimization:
 
-4. Program 4
+Before Optimization
+Stats -- #instructions : 178
+         #reads : 60  #writes 47  #branches 17  #other 54
 
-5. Program 5
+After Optimization (peephole only)
+Stats -- #instructions : 153
+         #reads : 48  #writes 35  #branches 16  #other 54
+
+After Optimization (peephole only + copy propagation)
+Stats -- #instructions : 153
+         #reads : 27  #writes 35  #branches 16  #other 75
+
+Considering only peephole: 20% reduction in the number of read instructions and
+25% reduction in the number of write instructions due to optimizations c and d.
+And 5% reduction in the number of branch instructions due to optimizations a and
+ b.
+
+- Program 2
+
+This programs explores the effect of copy propagation on code optimization. It
+contains a series of consecutive assignment instructions that can be propagated
+by transitivity. Discounting the single write instruction optimized by peephole
+(optimization d), the expressive reduction in the number of read instructions
+is all due to copy propagation.
+
+Before Optimization
+Stats -- #instructions : 61
+         #reads : 23  #writes 23  #branches 3  #other 12
+
+After Optimization
+Stats -- #instructions : 59
+         #reads : 3  #writes 22  #branches 3  #other 31
+
+87% reduction in the number of read instructions.
+
+- Program 3
+
+This programs explores the effect of dead code elimination on a program with
+three blocks comprised of instructions that are all dead.
+
+Before Optimization
+Stats -- #instructions : 85
+         #reads : 25  #writes 25  #branches 7  #other 28
+
+After Optimization
+Stats -- #instructions : 47
+         #reads : 7  #writes 6  #branches 7  #other 27
+
+72% reduction in the number of read instructions and 76% reduction in the number
+ of write instructions. The resultant optimized code does not contain any
+ assignment instructions but the ones necessary to assign a constant to a
+ temporary variable that is, in turn, used as parameter to the println function
+  call.
+
+- Program 4
+
+This program is a merge of the previous 3 programs. I aim to explore the
+contribution of each optimization individually and as a whole.
+
+Before Optimization
+Stats -- #instructions : 318
+         #reads : 113  #writes 102  #branches 23  #other 80
+
+After Optimization (peephole only)
+Stats -- #instructions : 271
+         #reads : 90  #writes 79  #branches 22  #other 80
+
+After Optimization (peephole + copy propagation)
+Stats -- #instructions : 271
+         #reads : 42  #writes 79  #branches 22  #other 128
+
+After Optimization (dead code elimination only)
+Stats -- #instructions : 218
+         #reads : 65  #writes 52  #branches 23  #other 78
+
+After Optimization(local + global optimization)
+Stats -- #instructions : 145
+         #reads : 29  #writes 16  #branches 22  #other 78
+
+
+The more we use combined optimization methods, the more instructions we can
+discard in the code. One thing to notice here is the effect of local
+optimization followed by a global one. The copy propagation process created some
+ dead instructions that could be later removed by dead code elimination,
+ causing a reduction of 65% in the number of read instructions (from 65 to 29)
+ and 70% in the number of dead instructions (from 52 to 16) compared to the
+ number of read/write instructions after dead code elimination alone.
+
+- Program 5
+
+The most costly of the three algorithms implemented is dead code elimination
+because it requires liveness analysis and the information is not constrained to
+a single block. This program consists of a series of dead instructions
+inside nested loops (therefore, multiple blocks) to allow us to compare how the
+optimization affects the running time of the compiler.
+
+Before Optimization
+Stats -- #instructions : 110571
+         #reads : 38902  #writes 36855  #branches 10238  #other 24576
+
+Running time (10 independent executions): 0.21 +|- 0.035 ms
+
+After Optimization(local + global optimization)
+Stats -- #instructions : 47100
+         #reads : 10238  #writes 6143  #branches 8191  #other 22528
+
+Running time (10 independent executions): 1 +|- 0.04 ms
+
+Local and global optimizations were able to reduce by a large amount the number
+of instructions in this sample program. 76% reduction in read, 83% in write and
+20% branch instructions. All of this, however, at a cost of taking almost 5x
+more milliseconds to generate the final assembly code.
+
+
 
 
 

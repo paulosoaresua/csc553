@@ -1,26 +1,19 @@
 extern void println(int x);
 
-/** This program evaluates the efficiency of the peephole optimizations
-performed**/
+/** To test the effect of peephole optimization. **/
 
-int power(int number, int p) {
-  int x
-  int pow;
+void main(void)
+{
+  int x, y;
 
-  pow = 1;
-  for(x = 0; x < p; x = x + 1) {
-    pow = pow * number;
+  for(x = 0; x < 10;x = x + 1) {
+    x = x;
   }
 
-  return pow;
-}
+  y = x;
 
-void main(void) {
-  int x;
-
-  x = 0;
-  for(;x < 10;x = x + 1) {
-    println(power(x, 2));
+  if(x == y) {
+    println(1);
   }
 
 }
