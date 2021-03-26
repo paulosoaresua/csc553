@@ -6,15 +6,15 @@
 #ifndef CSC553_GRAPH_H
 #define CSC553_GRAPH_H
 
+#import "global.h"
 #import "set.h"
 #import "symbol-table.h"
-#import "global.h"
 
-typedef struct GraphNode;
+typedef struct GraphNode gnode;
 
 // Double linked list of graph nodes
 typedef struct NodeListItem {
-  struct GraphNode *node;
+  gnode *node;
 
   struct NodeListItem *next;
   struct NodeListItem *prev;
@@ -27,13 +27,6 @@ typedef struct GraphNode {
   int num_neighbors;
   gnode_list_item *neighbors;
 } gnode;
-
-/**
- * Creates a graph as a list of nodes.
- *
- * @return head of the list of nodes in the new graph
- */
-gnode_list_item *create_graph();
 
 /**
  * Creates a graph node
@@ -80,6 +73,6 @@ gnode_list_item *remove_node_from_graph(gnode_list_item *graph_item,
  *
  * @param graph_head: head in the list of nodes from a graph
  */
-void print_graph(gnode_list_item *graph_head, FILE* file);
+void print_graph(gnode_list_item *graph_head, FILE *file);
 
 #endif

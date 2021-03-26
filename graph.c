@@ -23,18 +23,19 @@ gnode *create_graph_node(symtabnode *var, set live_range) {
 }
 
 gnode_list_item *add_node_to_graph(gnode *node, gnode_list_item *graph_head) {
-  if (graph_head->node) {
+  gnode_list_item *new_item = zalloc(sizeof(gnode_list_item *));
+  new_item->node = NULL;
+  new_item->prev = NULL;
+  new_item->next = NULL;
+
+  if (graph_head) {
     // Add a new item in the beginning of the list of nodes from a graph
-    gnode_list_item *new_item = zalloc(sizeof(gnode_list_item *));
     new_item->node = node;
     new_item->next = graph_head;
     graph_head->prev = new_item;
-    graph_head = new_item;
-  } else {
-    graph_head->node = node;
   }
 
-  return graph_head;
+  return new_item;
 }
 
 void add_edge(gnode *node1, gnode *node2) {
@@ -63,6 +64,10 @@ void add_edge(gnode *node1, gnode *node2) {
 
 gnode_list_item *remove_node_from_graph(gnode_list_item *graph_item,
                                         gnode_list_item *graph_head) {
+
+  if(!graph_head || !graph_item) {
+    return graph_head;
+  }
 
   // Remove edges
   gnode_list_item *neighbor = graph_item->node->neighbors;
