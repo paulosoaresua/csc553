@@ -21,6 +21,7 @@ CFILES = error.c \
 	reaching_definitions_analysis.c\
 	set.c\
 	block.c\
+	graph.c
 
 OFILES = error.o \
 	lex.yy.o \
@@ -39,6 +40,7 @@ OFILES = error.o \
     reaching_definitions_analysis.o\
     set.o\
     block.o\
+    graph.o
 
 .c.o :
 	$(CC) $(CFLAGS) -c $<
@@ -71,6 +73,8 @@ set.o : set.c
 reaching_definition_analysis.o: reaching_definitions_analysis.c control_flow.c
 
 liveness_analysis.o : control_flow.c
+
+graph.o : graph.c
 
 util.o : global.h util.h util.c
 
