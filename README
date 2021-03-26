@@ -9,7 +9,7 @@ These are the files present initially:
 
   Makefile	builds the front end; this results in an executable
 		called "parse".
-		
+
 		Defining the symbol DEBUG in the variable CFLAGS will
 		cause the syntax tree to be printed out after processing
 		each function.
@@ -25,7 +25,7 @@ These are the files present initially:
   print.c       Code for printing stuff out.  Right now it contains code
                 for printing out syntax trees.
 
-  protos.h      Prototypes.  Right now it contains prototypes for 
+  protos.h      Prototypes.  Right now it contains prototypes for
   	        syntax tree accessor functions.
 
   scanner.l	Flex specification for the scanner.
@@ -44,8 +44,8 @@ These are the files present initially:
 
 Additionally, the following files are created during the build process:
 
-  y.tab.h, 
-  y.tab.c, 
+  y.tab.h,
+  y.tab.c,
   y.output	Created by yacc.
 
   lex.yy.c	Created by flex.

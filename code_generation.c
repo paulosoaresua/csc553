@@ -86,7 +86,8 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
       return;
     } else {
       node->place = create_temporary(t_Int);
-      instruction = create_const_int_instruction(node->val.iconst, node->place);
+      tmp = create_constant_variable(t_Int, node->val.iconst);
+      instruction = create_instruction(OP_Assign, tmp, NULL, node->place);
       append_instruction(instruction, node);
     }
     break;
@@ -97,8 +98,8 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
       return;
     } else {
       node->place = create_temporary(t_Char);
-      instruction =
-          create_const_char_instruction(node->val.iconst, node->place);
+      tmp = create_constant_variable(t_Char, node->val.iconst);
+      instruction = create_instruction(OP_Assign, tmp, NULL, node->place);
       append_instruction(instruction, node);
     }
     break;
@@ -142,10 +143,7 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
     append_instruction(instruction, node);
 
     if (function_ptr->ret_type != t_None) {
-      // $v0 will be saved in a dedicated memory cell (using t_Int here as a
-      // proxy to t_Word)
       node->place = create_temporary(function_ptr->ret_type);
-//      node->place = create_temporary(t_Int);
       instruction = create_instruction(OP_Retrieve, NULL, NULL, node->place);
       append_instruction(instruction, node);
     }
@@ -166,11 +164,11 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
       append_child_instructions(stReturn(node), node);
 
       node->place = create_temporary(func_header->ret_type);
-      instruction = create_instruction(OP_Assign, stReturn(node)->place,
-          NULL, node->place);
+      instruction = create_instruction(OP_Assign, stReturn(node)->place, NULL,
+                                       node->place);
       append_instruction(instruction, node);
     }
-    instruction = create_instruction(OP_Return, NULL, NULL, node->place);
+    instruction = create_instruction(OP_Return, node->place, NULL, NULL);
     append_instruction(instruction, node);
     break;
 
@@ -182,7 +180,7 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
                                      node->place);
     append_instruction(instruction, node);
 
-    if(stUnop_Op(node)->place->is_temporary) {
+    if (stUnop_Op(node)->place->is_temporary) {
       free_temporary(stUnop_Op(node)->place);
     }
     break;
@@ -225,7 +223,7 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
 
     if (stIf_Else(node)) {
       // Jump to after the IF statement
-      instruction = create_jump_instruction(label_after->label);
+      instruction = create_jump_instruction(label_after);
       append_instruction(instruction, node);
 
       // Else block
@@ -245,7 +243,7 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
     inode *label_after = create_label_instruction();
 
     // Jump to eval
-    instruction = create_jump_instruction(label_eval->label);
+    instruction = create_jump_instruction(label_eval);
     append_instruction(instruction, node);
 
     // Body
@@ -274,7 +272,7 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
     append_child_instructions(stFor_Init(node), node);
 
     // Jump to eval
-    instruction = create_jump_instruction(label_eval->label);
+    instruction = create_jump_instruction(label_eval);
     append_instruction(instruction, node);
 
     // Body
@@ -294,7 +292,7 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
       append_child_instructions(stFor_Test(node), node);
     } else {
       // No condition. Runs forever until stopped internally by a return.
-      instruction = create_jump_instruction(label_body->label);
+      instruction = create_jump_instruction(label_body);
       append_instruction(instruction, node);
     }
 
@@ -309,7 +307,7 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type) {
                            R_VALUE);
     append_child_instructions(stArraySubscript_Subscript(node), node);
 
-    if(stArraySubscript_Subscript(node)->place->is_temporary) {
+    if (stArraySubscript_Subscript(node)->place->is_temporary) {
       free_temporary(stArraySubscript_Subscript(node)->place);
     }
 
@@ -368,10 +366,10 @@ static void generate_binary_expr_code(symtabnode *func_header, tnode *node,
       create_expr_instruction(OP_BinaryArithmetic, stBinop_Op1(node)->place,
                               stBinop_Op2(node)->place, node->place, type);
 
-  if(stBinop_Op1(node)->place->is_temporary) {
+  if (stBinop_Op1(node)->place->is_temporary) {
     free_temporary(stBinop_Op1(node)->place);
   }
-  if(stBinop_Op2(node)->place->is_temporary) {
+  if (stBinop_Op2(node)->place->is_temporary) {
     free_temporary(stBinop_Op2(node)->place);
   }
 
@@ -427,12 +425,11 @@ static void generate_bool_expr_code(symtabnode *func_header, tnode *node,
     append_child_instructions(stBinop_Op2(node), node);
 
     enum InstructionType type = get_boolean_comp_type(node->ntype);
-    instruction = create_cond_jump_instruction(OP_If, stBinop_Op1(node)->place,
-                                               stBinop_Op2(node)->place,
-                                               label_true->label, type);
+    instruction = create_cond_jump_instruction(
+        stBinop_Op1(node)->place, stBinop_Op2(node)->place, label_true, type);
     append_instruction(instruction, node);
 
-    instruction = create_jump_instruction(label_false->label);
+    instruction = create_jump_instruction(label_false);
     append_instruction(instruction, node);
     break;
   }

@@ -67,8 +67,8 @@ typedef struct treenode {
     struct stmt stmtNode;
   } val;
 
-  struct instr_node *code_head;
-  struct instr_node *code_tail;
+  struct Instruction *code_head;
+  struct Instruction *code_tail;
   symtabnode *place; // stores an expression's value
   symtabnode *loc; // stores the address of an expression's value
 

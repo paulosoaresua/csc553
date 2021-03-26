@@ -17,7 +17,13 @@ set(CFILES
         util.c
         instruction.c
         code_generation.c
-        code_translation.c)
+        code_translation.c
+        code_optimization.c
+        control_flow.c
+        block.c
+        set.c
+        reaching_definitions_analysis.c
+        liveness_analysis.c)
 
 find_package(BISON 3.7.1)
 find_package(FLEX 2.5.4)

@@ -6,20 +6,16 @@
 #ifndef CSC553_INSTRUCTION_H
 #define CSC553_INSTRUCTION_H
 
-#include "global.h"
+#include "block.h"
 #include "symbol-table.h"
 
 typedef enum OpType {
-  OP_Assign_Int,
-  OP_Assign_Char,
-  OP_Assign_Str,
   OP_Assign,
   OP_Call,
   OP_Param,
   OP_Retrieve,
   OP_Enter,
   OP_Return,
-  OP_String,
   OP_Global,
   OP_UMinus,
   OP_BinaryArithmetic,
@@ -27,7 +23,7 @@ typedef enum OpType {
   OP_If,
   OP_Goto,
   OP_Index_Array,
-  OP_Deref
+  OP_Deref,
 } OPType;
 
 typedef enum InstructionType {
@@ -43,32 +39,33 @@ typedef enum InstructionType {
   IT_GE,
 } InstructionType;
 
-typedef struct instr_node {
+typedef struct Instruction {
   enum OpType op_type;
   symtabnode *dest;
   char *label;
   enum InstructionType type;
+  struct Instruction *jump_to;
 
   union {
     struct op_members {
       symtabnode *src1;
       symtabnode *src2;
     } op_members;
-    int const_int;
-    char *const_string;
   } val;
 
-  struct instr_node *next;
+  struct Instruction *previous;
+  struct Instruction *next;
+
+  // For code optimization
+  int order;
+  int definition_id; // Unique ID for each instruction that assigns to a
+  // variable
+  bnode *block;
+  bool dead;
+
 } inode;
 
 static int label_counter = 0;
-
-/**
- * Creates a label instruction for jumping purposes.
- *
- * @return new label instruction
- */
-inode *create_label_instruction();
 
 /**
  * Creates a pointer to a 3-address instruction.
@@ -82,6 +79,13 @@ inode *create_label_instruction();
  */
 inode *create_instruction(enum OpType i_type, symtabnode *src1,
                           symtabnode *src2, symtabnode *dest);
+
+/**
+ * Creates a label instruction for jumping purposes.
+ *
+ * @return new label instruction
+ */
+inode *create_label_instruction();
 
 /**
  * Creates an instruction for an expression.
@@ -98,27 +102,6 @@ inode *create_expr_instruction(enum OpType op_type, symtabnode *src1,
                                enum InstructionType type);
 
 /**
- * Creates an instruction for a constant integer.
- *
- * @param constant: constant integer
- * @param dest: destination to store the integer
- *
- * @return new instruction
- */
-inode *create_const_int_instruction(int int_val, symtabnode *dest);
-
-/**
- * Creates an instruction for a constant character.
- *
- * @param char_val: constant char as an integer
- * @param dest: destination to store the char
- *
- * @return new instruction
- */
-inode *create_const_char_instruction(int char_val, symtabnode *dest);
-
-
-/**
  * Creates an instruction for declaration of a global variable.
  *
  * @param var: symbol table entry for the global variable
@@ -130,26 +113,68 @@ inode *create_global_decl_instruction(symtabnode *var);
 /**
  * Creates a conditional jump instruction to jump to a label.
  *
-  * @param op_type: type of the operation
  * @param src1: first operand
  * @param src2: second operand
- * @param label: label to jump to
+ * @param destiny_instruction: instruction to jump to
  * @param type: type of the comparison
  * @return
  */
-inode *create_cond_jump_instruction(enum OpType op_type, symtabnode *src1,
-                               symtabnode *src2, char *label,
-                               enum InstructionType type);
+inode *create_cond_jump_instruction(symtabnode *src1,
+                                    symtabnode *src2,
+                                    inode *destiny_instruction,
+                                    enum InstructionType type);
 
 /**
  * Creates an unconditional jump instruction.
  *
- * @param label: label to jump to
+ * @param destiny_instruction: instruction to jump to
  * @return
  */
-inode *create_jump_instruction(char *label);
+inode *create_jump_instruction(inode *destiny_instruction);
+
+/**
+ * Print 3-addr code instruction
+ *
+ * @param instruction: instruction
+ * @param file: file to print the instruction to
+ */
+void print_instruction(inode *instruction, FILE* file);
 
 #define SRC1(x) (x)->val.op_members.src1
 #define SRC2(x) (x)->val.op_members.src2
+
+/*********************************************************************
+ *                                                                   *
+ *                           for optimization                        *
+ *                                                                   *
+ *********************************************************************/
+
+/**
+ * Connects a subsequent instruction to its predecessor.
+ *
+ * @param instructions_head: first of a list of instructions.
+ */
+void fill_backward_connections(inode *instructions_head);
+
+/**
+ * Inverts boolean operator of a boolean expression instruction.
+ *
+ * @param instruction: instruction
+ */
+void invert_boolean_operator(inode *instruction);
+
+/**
+ * Checks whether the instruction redefines a variable.
+ *
+ * @param instruction: instruction
+ * @return
+ */
+bool redefines_variable(inode* instruction);
+
+/**
+ * Checks whether the instruction is one of a kind that has a variable as RHS. *
+ * @return
+ */
+bool is_rhs_variable();
 
 #endif // CSC553_INSTRUCTION_H

@@ -9,6 +9,7 @@
 
 static void print_println();
 static void print_function_header(char *function_name);
+static void load_int_to_register(int integer, char *reg);
 static void load_to_register(symtabnode *addr, char *reg, int dest_type);
 static void store_at_memory(symtabnode *addr, char *reg);
 static char *get_operation_name(enum InstructionType type);
@@ -20,11 +21,16 @@ void print_pre_defined_instructions() {
   printf("main: j _main \n");
 }
 
-void print_function(tnode *node) {
+void print_instructions(tnode *node) {
   inode *last_instruction = NULL;
   inode *curr_instruction = node->code_head;
 
   while (curr_instruction) {
+    if (curr_instruction->dead) {
+      curr_instruction = curr_instruction->next;
+      continue;
+    }
+
     switch (curr_instruction->op_type) {
     case OP_Global: {
       if (!last_instruction || last_instruction->op_type != OP_Global) {
@@ -79,44 +85,40 @@ void print_function(tnode *node) {
       break;
     }
 
-    case OP_Assign_Int:
-      printf("\n");
-      printf("  # OP_Assign_Int \n");
-      int n = curr_instruction->val.const_int;
-      int high = (n >> 16);
-      int low = (n & 0xffff);
-      if (high == 0) {
-        printf("  li $t0, %d \n", n);
-      } else {
-        printf("  lui $t0, %d \n", high);
-        printf("  ori $t0, %d \n", low);
-      }
-      store_at_memory(curr_instruction->dest, "$t0");
-      break;
-
-    case OP_Assign_Char:
-      printf("\n");
-      printf("  # OP_Assign_Char \n");
-      printf("  li $t0, %d       \n", curr_instruction->val.const_int);
-      store_at_memory(curr_instruction->dest, "$t0");
-      break;
+      //    case OP_Assign_Int:
+      //    case OP_Assign_Char:
+      //      printf("\n");
+      //      if(curr_instruction->op_type == OP_Assign_Int) {
+      //        printf("  # OP_Assign_Int \n");
+      //      } else{
+      //        printf("  # OP_Assign_Char \n");
+      //      }
+      //
+      //      load_int_to_register(curr_instruction->val.const_int, "$t0");
+      //      if (curr_instruction->dest->type == t_Addr) {
+      //        load_to_register(curr_instruction->dest, "$t1", t_Word);
+      //        char mem_op_type =
+      //        get_mem_op_type(curr_instruction->dest->elt_type); printf("  s%c
+      //        $t0, 0($t1) \n", mem_op_type);
+      //      } else {
+      //        store_at_memory(curr_instruction->dest, "$t0");
+      //      }
+      //      break;
 
     case OP_Assign:
       printf("\n");
       printf("  # OP_Assign      \n");
+      load_to_register(SRC1(curr_instruction), "$t0",
+                       SRC1(curr_instruction)->type);
       if (curr_instruction->dest->type == t_Addr) {
         // The LHS is an array memory location, therefore we load the word in
         // curr_instruction->dest instead of its address. And the type of the
         // value to be stored in the array location is determined by the type
         // of the elements in the array.
-        load_to_register(SRC1(curr_instruction), "$t0",
-                         SRC1(curr_instruction)->type);
         load_to_register(curr_instruction->dest, "$t1", t_Word);
         char mem_op_type = get_mem_op_type(curr_instruction->dest->elt_type);
         printf("  s%c $t0, 0($t1) \n", mem_op_type);
       } else {
-        load_to_register(SRC1(curr_instruction), "$t0",
-                         SRC1(curr_instruction)->type);
         store_at_memory(curr_instruction->dest, "$t0");
       }
       break;
@@ -124,16 +126,17 @@ void print_function(tnode *node) {
     case OP_Param: {
       printf("\n");
       printf("  # OP_Param       \n");
-      if (SRC1(curr_instruction)->formal) {
-        // When a function passes one of its formal to another, just copy the
-        // whole word
+      if (SRC1(curr_instruction)->formal &&
+          SRC1(curr_instruction)->type == t_Array) {
+        // When a function passes one of its formal to another, just copy
+        // the whole word if it stores a memory address
         load_to_register(SRC1(curr_instruction), "$t0", t_Word);
       } else {
         load_to_register(SRC1(curr_instruction), "$t0",
                          SRC1(curr_instruction)->type);
       }
       printf("  la $sp, -4($sp)  \n");
-      printf("  sw $t0, 0($sp)   \n");
+      printf("  sw $t0, 0($sp)  \n");
 
       break;
     }
@@ -150,9 +153,9 @@ void print_function(tnode *node) {
     case OP_Return:
       printf("\n");
       printf("  # OP_Return    \n");
-      if (curr_instruction->dest) {
-        load_to_register(curr_instruction->dest, "$v0",
-                         curr_instruction->dest->type);
+      if (SRC1(curr_instruction)) {
+        load_to_register(SRC1(curr_instruction), "$v0",
+                         SRC1(curr_instruction)->type);
       }
       printf("  la $sp, 0($fp) \n");
       printf("  lw $ra, 0($sp) \n");
@@ -202,13 +205,14 @@ void print_function(tnode *node) {
       load_to_register(SRC2(curr_instruction), "$t1",
                        SRC2(curr_instruction)->type);
       char *op_name = get_operation_name(curr_instruction->type);
-      printf("  b%s $t0, $t1, _%s \n", op_name, curr_instruction->label);
+      printf("  b%s $t0, $t1, _%s \n", op_name,
+             curr_instruction->jump_to->label);
       break;
 
     case OP_Goto:
       printf("\n");
       printf("  # OP_Goto \n");
-      printf("  j _%s     \n", curr_instruction->label);
+      printf("  j _%s     \n", curr_instruction->jump_to->label);
       break;
 
     case OP_Index_Array:
@@ -219,8 +223,8 @@ void print_function(tnode *node) {
       // Load address of the first position of the array into $t1
       if (SRC2(curr_instruction)->formal) {
         // If it's a formal, the address of the first position of the array
-        // will be stored in the stack, therefore we read the content instead of
-        // the address of the formal in the stack;
+        // will be stored in the stack, therefore we read the content instead
+        // of the address of the formal in the stack;
         load_to_register(SRC2(curr_instruction), "$t1", t_Word);
       } else {
         load_to_register(SRC2(curr_instruction), "$t1", t_Addr);
@@ -283,13 +287,33 @@ static void print_function_header(char *function_name) {
   printf("# -------------------------- \n");
 }
 
-static void load_to_register(symtabnode *addr, char *reg, int dest_type) {
-  char load_op_type = get_mem_op_type(dest_type);
-
-  if (addr->scope == Global) {
-    printf("  l%c %s, _%s \n", load_op_type, reg, addr->name);
+/**
+ * Loads a constant integer to a register.
+ *
+ * @param integer: constant integer
+ * @param reg: register
+ */
+static void load_int_to_register(int integer, char *reg) {
+  int high = (integer >> 16);
+  int low = (integer & 0xffff);
+  if (high == 0) {
+    printf("  li %s, %d \n", reg, integer);
   } else {
-    printf("  l%c %s, %d($fp) \n", load_op_type, reg, addr->fp_offset);
+    printf("  lui %s, %d \n", reg, high);
+    printf("  ori %s, %d \n", reg, low);
+  }
+}
+
+static void load_to_register(symtabnode *addr, char *reg, int dest_type) {
+  if (addr->is_constant) {
+    load_int_to_register(addr->const_val, reg);
+  } else {
+    char load_op_type = get_mem_op_type(dest_type);
+    if (addr->scope == Global) {
+      printf("  l%c %s, _%s \n", load_op_type, reg, addr->name);
+    } else {
+      printf("  l%c %s, %d($fp) \n", load_op_type, reg, addr->fp_offset);
+    }
   }
 }
 

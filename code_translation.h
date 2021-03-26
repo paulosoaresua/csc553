@@ -19,7 +19,7 @@ void print_pre_defined_instructions();
  * Converts and prints on the terminal a series of 3-address instructions to
  * MIPS assembly code
  */
-void print_function(tnode* node);
+void print_instructions(tnode* node);
 
 /**
  * Prints string declarations.
