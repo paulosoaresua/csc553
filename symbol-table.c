@@ -55,6 +55,14 @@ void SymTabInit(int sc) {
   int i;
 
   for (i = 0; i < HASHTBLSZ; i++) {
+    /// Free memory allocated to variables, list of variables and graph nodes.
+    symtabnode* var = SymTab[sc][i];
+    while(var) {
+      symtabnode* next = var->next;
+      free(var->live_range_node);
+      free(var->copied_to);
+      var = next;
+    }
     SymTab[sc][i] = NULL;
   }
 }

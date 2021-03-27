@@ -19,6 +19,11 @@ void enable_local_optimization();
 void enable_global_optimization();
 
 /**
+ * Enables register allocation optimization.
+ */
+void enable_register_allocation_optimization();
+
+/**
  * Print blocks and instructions.
  *
  * @param file: file where the instructions must be printed

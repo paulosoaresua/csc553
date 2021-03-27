@@ -5,12 +5,18 @@
 
 #include "code_optimization.h"
 #include "liveness_analysis.h"
+#include "stack.h"
 
 bool local_enabled = false;
 bool global_enabled = false;
+bool register_allocation_enabled = false;
 FILE *file_3addr;
 
 static var_list_node *propagated_vars;
+
+// Fast access of a variable via its id.
+// It's filled when the interference graph is created.
+static symtabnode **local_variables;
 
 static void optimize_locally(inode *instruction_head);
 static void run_peephole_optimization(inode *instruction_head);
@@ -23,15 +29,24 @@ static void clear_propagated_vars();
 static void attach_variable_to_original(symtabnode *var, symtabnode *original);
 static void detach_variable_from_original(symtabnode *var);
 static void detach_copies_from_original(symtabnode *original);
+static void optimize_register_allocation();
+static gnode_list_item *create_interference_graph();
+static void create_interference_graph_connections();
+static symtabnode *get_variable_by_id(int id);
+static void color_graph(gnode_list_item *graph, int k);
 
 void enable_local_optimization() { local_enabled = true; }
 
 void enable_global_optimization() { global_enabled = true; }
 
+void enable_register_allocation_optimization() {
+  register_allocation_enabled = true;
+}
+
 void print_blocks_and_instructions(FILE *file) { file_3addr = file; }
 
 void optimize_instructions(tnode *function_body) {
-  if (local_enabled || global_enabled) {
+  if (local_enabled || global_enabled || register_allocation_enabled) {
     fill_backward_connections(function_body->code_head);
     build_control_flow_graph(function_body->code_head);
     if (file_3addr) {
@@ -41,6 +56,7 @@ void optimize_instructions(tnode *function_body) {
     }
     optimize_locally(function_body->code_head);
     optimize_globally();
+    optimize_register_allocation();
     if (file_3addr) {
       fprintf(file_3addr, "\nAfter Optimization\n");
       print_3addr_instructions(function_body->code_head);
@@ -235,7 +251,7 @@ void do_dead_code_elimination() {
 
 bool remove_dead_instructions() {
   blist_node *block_list_node = get_all_blocks();
-  int n = get_total_assignment_instructions();
+  int n = get_total_local_variables();
   bool dead_instructions_found = false;
 
   while (block_list_node) {
@@ -304,7 +320,7 @@ bool remove_dead_instructions() {
   return dead_instructions_found;
 }
 
-static void print_3addr_instructions(inode *instruction_head) {
+void print_3addr_instructions(inode *instruction_head) {
   inode *curr_instruction = instruction_head;
   bnode *curr_block;
   while (curr_instruction) {
@@ -327,5 +343,145 @@ static void print_3addr_instructions(inode *instruction_head) {
     }
     fprintf(file_3addr, "\n");
     curr_instruction = curr_instruction->next;
+  }
+}
+
+void optimize_register_allocation() {
+  if (register_allocation_enabled) {
+    gnode_list_item *graph = create_interference_graph();
+    find_in_and_out_liveness_sets(get_all_blocks());
+    create_interference_graph_connections();
+    color_graph(graph, 32);
+  }
+}
+
+gnode_list_item *create_interference_graph() {
+  gnode_list_item *graph;
+  symtabnode **entries = get_symbol_table_entries(Local);
+  int table_size = get_symbol_table_size();
+  int n = get_total_local_variables();
+
+  *local_variables = zalloc(n * sizeof(symtabnode *));
+
+  for (int i = 0; i < table_size; i++) {
+    symtabnode *var = entries[i];
+    while (var) {
+      if (var->type == t_Array) {
+        // This optimization is not carried out for arrays
+        continue;
+      }
+
+      var->live_range_node = create_graph_node(var->id);
+      add_node_to_graph(var->live_range_node, graph);
+      local_variables[var->id] = var;
+
+      var = var->next;
+    }
+  }
+
+  return graph;
+}
+
+void create_interference_graph_connections() {
+  blist_node *block_list_node = get_all_blocks();
+  int n = get_total_local_variables();
+
+  while (block_list_node) {
+    set live_instructions = clone_set(block_list_node->block->out);
+
+    inode *curr_instruction = block_list_node->block->last_instruction;
+    while (curr_instruction &&
+           curr_instruction->block == block_list_node->block) {
+      if (curr_instruction->dead) {
+        curr_instruction = curr_instruction->previous;
+        continue;
+      }
+
+      set lhs_set = create_empty_set(n);
+      set rhs_set = create_empty_set(n);
+
+      if (curr_instruction->dest && curr_instruction->dest->scope == Local) {
+        if (curr_instruction->dest->type != t_Addr) {
+          // This optimization is not carried out for arrays
+          add_to_set(curr_instruction->dest->id, lhs_set);
+        }
+      }
+
+      if (is_rhs_variable(curr_instruction)) {
+        if (SRC1(curr_instruction) && SRC1(curr_instruction)->scope == Local &&
+            !SRC1(curr_instruction)->is_constant &&
+            SRC1(curr_instruction)->type != t_Addr) {
+          add_to_set(SRC1(curr_instruction)->id, rhs_set);
+        }
+
+        if (SRC2(curr_instruction) && SRC2(curr_instruction)->scope == Local &&
+            !SRC2(curr_instruction)->is_constant &&
+            SRC2(curr_instruction)->type != t_Addr) {
+          add_to_set(SRC2(curr_instruction)->id, rhs_set);
+        }
+      }
+
+      if (!is_set_empty(lhs_set) && !is_set_empty(live_instructions)) {
+        // Link the live_range node of the variable being assigned to to
+        // all the variables in the current live set.
+        set tmp_set = clone_set(live_instructions);
+        for (int i = 0; i < n; i++) {
+          if (does_elto_belong_to_set(0, tmp_set)) {
+            symtabnode *var = get_variable_by_id(i);
+            add_edge(curr_instruction->dest->live_range_node,
+                     var->live_range_node);
+            remove_from_set(i, tmp_set);
+          }
+
+          if (is_set_empty(tmp_set))
+            break;
+        }
+      }
+
+      live_instructions = diff_sets(live_instructions, lhs_set);
+      live_instructions = unify_sets(live_instructions, rhs_set);
+
+      curr_instruction = curr_instruction->previous;
+    }
+
+    block_list_node = block_list_node->next;
+  }
+}
+
+symtabnode *get_variable_by_id(int id) { return local_variables[id]; }
+
+void color_graph(gnode_list_item *graph, int k) {
+  gnode_list_item *stack;
+
+  while (graph) {
+    bool any_colored = true;
+    while (any_colored) {
+      any_colored = false;
+      gnode_list_item *list_item = graph;
+      while (list_item) {
+        if (list_item->node->num_neighbors < k) {
+          push_to_graph_node_stack(list_item->node, stack);
+          graph = remove_node_from_graph(list_item, graph);
+          any_colored = true;
+        }
+
+        list_item = list_item->next;
+      }
+    }
+
+    if (graph) {
+      // Spill one of the remaining nodes
+      // TODO - implement priority queue. Now it's removing the first node in
+      //  the list.
+      graph = remove_node_from_graph(graph, graph);
+    }
+  }
+
+  // Assign colors to the nodes in the stack
+  gnode_list_item *list_item = stack;
+  int reg = 0;
+  while (list_item) {
+    list_item->node->reg = reg++ % k;
+    list_item = list_item->next;
   }
 }

@@ -11,11 +11,10 @@ gnode_list_item *create_graph() {
   return graph_head;
 }
 
-gnode *create_graph_node(symtabnode *var, set live_range) {
+gnode *create_graph_node(int id) {
   gnode *node = zalloc(sizeof(gnode *));
+  node->id = id;
   node->reg = -1;
-  node->var = var;
-  node->live_range = live_range;
   node->neighbors = NULL;
   node->num_neighbors = 0;
 
@@ -45,10 +44,9 @@ void add_edge(gnode *node1, gnode *node2) {
   if (node1->neighbors) {
     new_item->next = node1->neighbors;
     node1->neighbors->prev = new_item;
-    node1->neighbors = new_item;
-  } else {
-    node1->neighbors = new_item;
   }
+  node1->neighbors = new_item;
+  node1->neighbors++;
 
   // Add node1 to the list of neighbors of node2
   new_item = zalloc(sizeof(gnode_list_item *));
@@ -56,22 +54,23 @@ void add_edge(gnode *node1, gnode *node2) {
   if (node2->neighbors) {
     new_item->next = node2->neighbors;
     node2->neighbors->prev = new_item;
-    node2->neighbors = new_item;
-  } else {
-    node2->neighbors = new_item;
   }
+  node2->neighbors = new_item;
+  node2->neighbors++;
 }
 
 gnode_list_item *remove_node_from_graph(gnode_list_item *graph_item,
                                         gnode_list_item *graph_head) {
 
-  if(!graph_head || !graph_item) {
+  if (!graph_head || !graph_item) {
     return graph_head;
   }
 
   // Remove edges
   gnode_list_item *neighbor = graph_item->node->neighbors;
   while (neighbor) {
+    neighbor->node->num_neighbors--;
+
     if (neighbor->node->neighbors->node == graph_item->node) {
       // Node is the first in the list
       gnode_list_item *tmp = neighbor->node->neighbors;
@@ -100,9 +99,13 @@ gnode_list_item *remove_node_from_graph(gnode_list_item *graph_item,
       // Just remove it from the graph.
       free(tmp);
     }
+
+    neighbor = neighbor->next;
   }
 
   // Remove node from the list of nodes in the graph
+  graph_item->node->neighbors = NULL;
+  graph_item->node->num_neighbors = 0;
   gnode_list_item *new_head = graph_head;
   if (graph_item == graph_head) {
     new_head = graph_item->next;
@@ -123,13 +126,13 @@ void print_graph(gnode_list_item *graph_head, FILE *file) {
   fprintf(file, "----- \n");
   gnode_list_item *item = graph_head;
   while (item) {
-    fprintf(file, "%s: ", item->node->var->name);
+    fprintf(file, "%s: ", item->node->id);
     gnode_list_item *neighbor = item->node->neighbors;
     while (neighbor) {
       if (neighbor->next) {
-        fprintf(file, "%s, ", neighbor->node->var->name);
+        fprintf(file, "%s, ", neighbor->node->id);
       } else {
-        fprintf(file, "%s\n", neighbor->node->var->name);
+        fprintf(file, "%s\n", neighbor->node->id);
       }
       neighbor = neighbor->next;
     }
