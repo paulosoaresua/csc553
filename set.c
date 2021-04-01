@@ -106,6 +106,8 @@ bool is_set_empty(set set) {
 }
 
 bool does_elto_belong_to_set(int elto, set set) {
+  if (is_set_undefined(set)) return false;
+
   int partition = elto / BITS_PER_PARTITION;
   int pos_in_partition = elto % BITS_PER_PARTITION;
   int elto_mask = (1 << pos_in_partition);

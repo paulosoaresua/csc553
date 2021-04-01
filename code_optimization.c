@@ -7,10 +7,14 @@
 #include "liveness_analysis.h"
 #include "stack.h"
 
-bool local_enabled = false;
-bool global_enabled = false;
-bool register_allocation_enabled = false;
+static bool local_enabled = false;
+static bool global_enabled = false;
+static bool register_allocation_enabled = false;
+static int num_used_registers = 0;
 FILE *file_3addr;
+
+static int NUM_REGISTERS = 16; // $t2 - $t9 + $s0 - $s7. The first $t reserved
+                               // for temporary operations and arrays.
 
 static var_list_node *propagated_vars;
 
@@ -351,17 +355,27 @@ void optimize_register_allocation() {
     gnode_list_item *graph = create_interference_graph();
     find_in_and_out_liveness_sets(get_all_blocks());
     create_interference_graph_connections();
-    color_graph(graph, 32);
+    if (file_3addr) {
+      fprintf(file_3addr, "\nInterference Graph:\n\n");
+      fprintf(file_3addr, "\nVariable IDs:\n");
+      for (int i = 0; i < get_total_local_variables(); i++) {
+        fprintf(file_3addr, "%s: %d\n", local_variables[i]->name,
+                (int)local_variables[i]->id);
+      }
+      fprintf(file_3addr, "\nAdjacency List:\n");
+      print_graph(graph, file_3addr);
+    }
+    color_graph(graph, NUM_REGISTERS);
   }
 }
 
 gnode_list_item *create_interference_graph() {
-  gnode_list_item *graph;
+  gnode_list_item *graph = NULL;
   symtabnode **entries = get_symbol_table_entries(Local);
   int table_size = get_symbol_table_size();
   int n = get_total_local_variables();
 
-  *local_variables = zalloc(n * sizeof(symtabnode *));
+  local_variables = zalloc(n * sizeof(symtabnode *));
 
   for (int i = 0; i < table_size; i++) {
     symtabnode *var = entries[i];
@@ -371,8 +385,8 @@ gnode_list_item *create_interference_graph() {
         continue;
       }
 
-      var->live_range_node = create_graph_node(var->id);
-      add_node_to_graph(var->live_range_node, graph);
+      var->live_range_node = create_graph_node(var->id, n - 1);
+      graph = add_node_to_graph(var->live_range_node, graph);
       local_variables[var->id] = var;
 
       var = var->next;
@@ -426,10 +440,13 @@ void create_interference_graph_connections() {
         // all the variables in the current live set.
         set tmp_set = clone_set(live_instructions);
         for (int i = 0; i < n; i++) {
-          if (does_elto_belong_to_set(0, tmp_set)) {
+          if (does_elto_belong_to_set(i, tmp_set)) {
             symtabnode *var = get_variable_by_id(i);
-            add_edge(curr_instruction->dest->live_range_node,
-                     var->live_range_node);
+            if (curr_instruction->dest != var) {
+              // No self-loops or multiple edges between the same nodes
+              add_edge(curr_instruction->dest->live_range_node,
+                       var->live_range_node);
+            }
             remove_from_set(i, tmp_set);
           }
 
@@ -451,7 +468,9 @@ void create_interference_graph_connections() {
 symtabnode *get_variable_by_id(int id) { return local_variables[id]; }
 
 void color_graph(gnode_list_item *graph, int k) {
-  gnode_list_item *stack;
+  if (k <= 0) {
+    return;
+  }
 
   while (graph) {
     bool any_colored = true;
@@ -459,13 +478,37 @@ void color_graph(gnode_list_item *graph, int k) {
       any_colored = false;
       gnode_list_item *list_item = graph;
       while (list_item) {
+        gnode_list_item *next = list_item->next;
+
         if (list_item->node->num_neighbors < k) {
-          push_to_graph_node_stack(list_item->node, stack);
+          if (is_set_empty(list_item->node->regs_to_avoid)) {
+            list_item->node->reg = 0;
+          } else {
+            for (int reg = 0; reg < k; reg++) {
+              if (!does_elto_belong_to_set(reg,
+                                           list_item->node->regs_to_avoid)) {
+                list_item->node->reg = reg;
+                break;
+              }
+            }
+          }
+          num_used_registers = list_item->node->reg + 1;
+
+          // Avoid using the same register in the neighbors of the current node.
+          gnode_list_item *neighbor = list_item->node->neighbors;
+          while (neighbor) {
+            if (is_set_undefined(neighbor->node->regs_to_avoid)) {
+              neighbor->node->regs_to_avoid = create_empty_set(k);
+            }
+            add_to_set(list_item->node->reg, neighbor->node->regs_to_avoid);
+            neighbor = neighbor->next;
+          }
+
           graph = remove_node_from_graph(list_item, graph);
           any_colored = true;
         }
 
-        list_item = list_item->next;
+        list_item = next;
       }
     }
 
@@ -475,13 +518,5 @@ void color_graph(gnode_list_item *graph, int k) {
       //  the list.
       graph = remove_node_from_graph(graph, graph);
     }
-  }
-
-  // Assign colors to the nodes in the stack
-  gnode_list_item *list_item = stack;
-  int reg = 0;
-  while (list_item) {
-    list_item->node->reg = reg++ % k;
-    list_item = list_item->next;
   }
 }

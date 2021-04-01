@@ -11,25 +11,25 @@ gnode_list_item *create_graph() {
   return graph_head;
 }
 
-gnode *create_graph_node(int id) {
-  gnode *node = zalloc(sizeof(gnode *));
+gnode *create_graph_node(int id, int max_neighbors) {
+  gnode *node = zalloc(sizeof(gnode));
   node->id = id;
   node->reg = -1;
   node->neighbors = NULL;
   node->num_neighbors = 0;
+  node->neighbor_set = create_empty_set(max_neighbors);
 
   return node;
 }
 
 gnode_list_item *add_node_to_graph(gnode *node, gnode_list_item *graph_head) {
-  gnode_list_item *new_item = zalloc(sizeof(gnode_list_item *));
-  new_item->node = NULL;
+  gnode_list_item *new_item = zalloc(sizeof(gnode_list_item));
+  new_item->node = node;
   new_item->prev = NULL;
   new_item->next = NULL;
 
   if (graph_head) {
     // Add a new item in the beginning of the list of nodes from a graph
-    new_item->node = node;
     new_item->next = graph_head;
     graph_head->prev = new_item;
   }
@@ -38,25 +38,32 @@ gnode_list_item *add_node_to_graph(gnode *node, gnode_list_item *graph_head) {
 }
 
 void add_edge(gnode *node1, gnode *node2) {
+  if (does_elto_belong_to_set(node1->id, node2->neighbor_set)) {
+    // No multiple edges between the same nodes.
+    return;
+  }
+
   // Add node2 to the list of neighbors of node1
-  gnode_list_item *new_item = zalloc(sizeof(gnode_list_item *));
+  gnode_list_item *new_item = zalloc(sizeof(gnode_list_item));
   new_item->node = node2;
   if (node1->neighbors) {
     new_item->next = node1->neighbors;
     node1->neighbors->prev = new_item;
   }
   node1->neighbors = new_item;
-  node1->neighbors++;
+  node1->num_neighbors++;
+  add_to_set(node2->id, node1->neighbor_set);
 
   // Add node1 to the list of neighbors of node2
-  new_item = zalloc(sizeof(gnode_list_item *));
+  new_item = zalloc(sizeof(gnode_list_item));
   new_item->node = node1;
   if (node2->neighbors) {
     new_item->next = node2->neighbors;
     node2->neighbors->prev = new_item;
   }
   node2->neighbors = new_item;
-  node2->neighbors++;
+  node2->num_neighbors++;
+  add_to_set(node1->id, node2->neighbor_set);
 }
 
 gnode_list_item *remove_node_from_graph(gnode_list_item *graph_item,
@@ -118,6 +125,10 @@ gnode_list_item *remove_node_from_graph(gnode_list_item *graph_item,
   }
   free(graph_item);
 
+  if (new_head) {
+    new_head->prev = NULL;
+  }
+
   return new_head;
 }
 
@@ -126,16 +137,17 @@ void print_graph(gnode_list_item *graph_head, FILE *file) {
   fprintf(file, "----- \n");
   gnode_list_item *item = graph_head;
   while (item) {
-    fprintf(file, "%s: ", item->node->id);
+    fprintf(file, "%d: ", item->node->id);
     gnode_list_item *neighbor = item->node->neighbors;
     while (neighbor) {
       if (neighbor->next) {
-        fprintf(file, "%s, ", neighbor->node->id);
+        fprintf(file, "%d, ", neighbor->node->id);
       } else {
-        fprintf(file, "%s\n", neighbor->node->id);
+        fprintf(file, "%d", neighbor->node->id);
       }
       neighbor = neighbor->next;
     }
+    fprintf(file, "\n");
     item = item->next;
   }
 }

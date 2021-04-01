@@ -7,6 +7,7 @@
 #define CSC553_GRAPH_H
 
 #import "global.h"
+#import "set.h"
 
 typedef struct GraphNode gnode;
 
@@ -21,8 +22,10 @@ typedef struct NodeListItem {
 typedef struct GraphNode {
   int id;
   int reg; // register where the live range is allocated (-1 if in memory)
+  set regs_to_avoid;
   int num_neighbors;
   gnode_list_item *neighbors;
+  set neighbor_set;
 } gnode;
 
 /**
@@ -31,9 +34,11 @@ typedef struct GraphNode {
  * @param var: live range variable
  * @param live_range: set of instructions part of the live range of the
  * variable
+ * @param max_neighbors: maximum number of neighbors the node can have
+ *
  * @return New graph node.
  */
-gnode *create_graph_node(int id);
+gnode *create_graph_node(int id, int max_neighbors);
 
 /**
  * Adds a node to a graph

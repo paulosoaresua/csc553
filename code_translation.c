@@ -4,16 +4,25 @@
  */
 
 #include "code_translation.h"
+#include "code_optimization.h"
 #include "instruction.h"
 #include "symbol-table.h"
+
+static int NUM_RESERVED_REG = 2;
 
 static void print_println();
 static void print_function_header(char *function_name);
 static void load_int_to_register(int integer, char *reg);
-static void load_to_register(symtabnode *addr, char *reg, int dest_type);
+static void load_from_memory(symtabnode *addr, char *reg, int dest_type);
 static void store_at_memory(symtabnode *addr, char *reg);
+static void copy_from_register(char *reg_src, char *reg_dest);
 static char *get_operation_name(enum InstructionType type);
 static char get_mem_op_type(int type);
+static char *get_register_name(int reg);
+static bool is_var_in_memory(symtabnode *var);
+static int find_register(symtabnode *var, int default_reg);
+void load_reg_allocated_variables_from_memory();
+void save_reg_allocated_variables_in_memory();
 
 void print_pre_defined_instructions() {
   print_println();
@@ -88,40 +97,76 @@ void print_instructions(tnode *node) {
     case OP_Assign:
       printf("\n");
       printf("  # OP_Assign      \n");
-      load_to_register(SRC1(curr_instruction), "$t0",
-                       SRC1(curr_instruction)->type);
       if (curr_instruction->dest->type == t_Addr) {
         // The LHS is an array memory location, therefore we load the word in
         // curr_instruction->dest instead of its address. And the type of the
         // value to be stored in the array location is determined by the type
         // of the elements in the array.
-        load_to_register(curr_instruction->dest, "$t1", t_Word);
+        load_from_memory(SRC1(curr_instruction), "$t0",
+                         SRC1(curr_instruction)->type);
+        load_from_memory(curr_instruction->dest, "$t1", t_Word);
         char mem_op_type = get_mem_op_type(curr_instruction->dest->elt_type);
         printf("  s%c $t0, 0($t1) \n", mem_op_type);
       } else {
-        store_at_memory(curr_instruction->dest, "$t0");
+        int src_reg = find_register(SRC1(curr_instruction), 0);
+        int dest_reg = find_register(curr_instruction->dest, 0);
+        if (is_var_in_memory(SRC1(curr_instruction))) {
+          if (is_var_in_memory(curr_instruction->dest)) {
+            load_from_memory(SRC1(curr_instruction), get_register_name(src_reg),
+                             SRC1(curr_instruction)->type);
+          } else {
+            // Copy directly to the register of the target variable
+            load_from_memory(SRC1(curr_instruction),
+                             get_register_name(dest_reg),
+                             SRC1(curr_instruction)->type);
+          }
+        }
+
+        if (!is_var_in_memory(SRC1(curr_instruction)) ||
+            is_var_in_memory(curr_instruction->dest)) {
+          if (is_var_in_memory(curr_instruction->dest)) {
+            store_at_memory(curr_instruction->dest, get_register_name(src_reg));
+          } else {
+            if (src_reg != dest_reg) {
+              // Copy from one register to the other
+              copy_from_register(get_register_name(src_reg),
+                                 get_register_name(dest_reg));
+            }
+          }
+        }
       }
       break;
 
     case OP_Param: {
       printf("\n");
       printf("  # OP_Param       \n");
+
+      int reg = find_register(SRC1(curr_instruction), 0);
+
       if (SRC1(curr_instruction)->formal &&
           SRC1(curr_instruction)->type == t_Array) {
         // When a function passes one of its formal to another, just copy
         // the whole word if it stores a memory address
-        load_to_register(SRC1(curr_instruction), "$t0", t_Word);
+        load_from_memory(SRC1(curr_instruction), get_register_name(reg),
+                         t_Word);
+        printf("  la $sp, -4($sp)  \n");
+        printf("  sw $t0, 0($sp)   \n");
       } else {
-        load_to_register(SRC1(curr_instruction), "$t0",
-                         SRC1(curr_instruction)->type);
+        if (is_var_in_memory(SRC1(curr_instruction))) {
+          load_from_memory(SRC1(curr_instruction), get_register_name(reg),
+                           SRC1(curr_instruction)->type);
+        }
       }
+      char mem_op_type = get_mem_op_type(SRC1(curr_instruction)->type);
       printf("  la $sp, -4($sp)  \n");
-      printf("  sw $t0, 0($sp)  \n");
+      printf("  s%c %s, 0($sp)    \n", mem_op_type, get_register_name(reg));
 
       break;
     }
 
     case OP_Call: {
+      // Store register variables in memory
+      save_reg_allocated_variables_in_memory();
       symtabnode *function_ptr = SRC1(curr_instruction);
       printf("\n");
       printf("  # OP_Call       \n");
@@ -134,40 +179,71 @@ void print_instructions(tnode *node) {
       printf("\n");
       printf("  # OP_Return    \n");
       if (SRC1(curr_instruction)) {
-        load_to_register(SRC1(curr_instruction), "$v0",
-                         SRC1(curr_instruction)->type);
+        if (is_var_in_memory(SRC1(curr_instruction))) {
+          load_from_memory(SRC1(curr_instruction), "$v0",
+                           SRC1(curr_instruction)->type);
+        } else {
+          int reg = find_register(SRC1(curr_instruction), 0);
+          copy_from_register(get_register_name(reg), "$v0");
+        }
       }
       printf("  la $sp, 0($fp) \n");
       printf("  lw $ra, 0($sp) \n");
       printf("  lw $fp, 4($sp) \n");
       printf("  la $sp, 8($sp) \n");
       printf("  jr $ra         \n");
+      // Copy from memory back to registers
+      load_reg_allocated_variables_from_memory();
       break;
 
     case OP_Retrieve:
-      store_at_memory(curr_instruction->dest, "$v0");
+      if (is_var_in_memory(curr_instruction->dest)) {
+        store_at_memory(curr_instruction->dest, "$v0");
+      } else {
+        int dest_reg = find_register(curr_instruction->dest, 0);
+        copy_from_register("$v0", get_register_name(dest_reg));
+      }
       break;
 
     case OP_UMinus:
       printf("\n");
       printf("  # OP_UMinus    \n");
-      // Load the content from src1 into $t0
-      load_to_register(SRC1(curr_instruction), "$t0",
-                       SRC1(curr_instruction)->type);
-      printf("  neg $t1, $t0 \n");
-      store_at_memory(curr_instruction->dest, "$t1");
+      int src_reg = find_register(SRC1(curr_instruction), 0);
+      if (is_var_in_memory(SRC1(curr_instruction))) {
+        load_from_memory(SRC1(curr_instruction), get_register_name(src_reg),
+                         SRC1(curr_instruction)->type);
+      }
+
+      int dest_reg = find_register(curr_instruction->dest, 0);
+      printf("  neg %s, %s \n", get_register_name(dest_reg),
+             get_register_name(src_reg));
+      if (is_var_in_memory(curr_instruction->dest)) {
+        store_at_memory(curr_instruction->dest, "$t1");
+      }
+
       break;
 
     case OP_BinaryArithmetic: {
       printf("\n");
       printf("  # OP_BinaryArithmetic    \n");
-      load_to_register(SRC1(curr_instruction), "$t0",
-                       SRC1(curr_instruction)->type);
-      load_to_register(SRC2(curr_instruction), "$t1",
-                       SRC2(curr_instruction)->type);
+      int src1_reg = find_register(SRC1(curr_instruction), 0);
+      int src2_reg = find_register(SRC2(curr_instruction), 1);
+      if (is_var_in_memory(SRC1(curr_instruction))) {
+        load_from_memory(SRC1(curr_instruction), get_register_name(src1_reg),
+                         SRC1(curr_instruction)->type);
+      }
+      if (is_var_in_memory(SRC1(curr_instruction))) {
+        load_from_memory(SRC2(curr_instruction), get_register_name(src2_reg),
+                         SRC2(curr_instruction)->type);
+      }
+
       char *op_name = get_operation_name(curr_instruction->type);
-      printf("  %s $t2, $t0, $t1 \n", op_name);
-      store_at_memory(curr_instruction->dest, "$t2");
+      int dest_reg = find_register(curr_instruction->dest, 0);
+      printf("  %s %s, %s, %s \n", op_name, get_register_name(dest_reg),
+             get_register_name(src1_reg), get_register_name(src2_reg));
+      if (is_var_in_memory(curr_instruction->dest)) {
+        store_at_memory(curr_instruction->dest, get_register_name(dest_reg));
+      }
       break;
     }
 
@@ -180,9 +256,9 @@ void print_instructions(tnode *node) {
     case OP_If:
       printf("\n");
       printf("  # OP_If \n");
-      load_to_register(SRC1(curr_instruction), "$t0",
+      load_from_memory(SRC1(curr_instruction), "$t0",
                        SRC1(curr_instruction)->type);
-      load_to_register(SRC2(curr_instruction), "$t1",
+      load_from_memory(SRC2(curr_instruction), "$t1",
                        SRC2(curr_instruction)->type);
       char *op_name = get_operation_name(curr_instruction->type);
       printf("  b%s $t0, $t1, _%s \n", op_name,
@@ -198,16 +274,16 @@ void print_instructions(tnode *node) {
     case OP_Index_Array:
       printf("\n");
       printf("  # OP_Index_Array \n");
-      load_to_register(SRC1(curr_instruction), "$t0",
+      load_from_memory(SRC1(curr_instruction), "$t0",
                        SRC1(curr_instruction)->type);
       // Load address of the first position of the array into $t1
       if (SRC2(curr_instruction)->formal) {
         // If it's a formal, the address of the first position of the array
         // will be stored in the stack, therefore we read the content instead
         // of the address of the formal in the stack;
-        load_to_register(SRC2(curr_instruction), "$t1", t_Word);
+        load_from_memory(SRC2(curr_instruction), "$t1", t_Word);
       } else {
-        load_to_register(SRC2(curr_instruction), "$t1", t_Addr);
+        load_from_memory(SRC2(curr_instruction), "$t1", t_Addr);
       }
       // Find the correct memory address of the index
       if (SRC2(curr_instruction)->elt_type == t_Int) {
@@ -220,7 +296,7 @@ void print_instructions(tnode *node) {
     case OP_Deref:
       printf("\n");
       printf("  # OP_Deref \n");
-      load_to_register(SRC1(curr_instruction), "$t0", t_Word);
+      load_from_memory(SRC1(curr_instruction), "$t0", t_Word);
       char mem_op_type = get_mem_op_type(curr_instruction->dest->type);
       printf("  l%c $t1, 0($t0) \n", mem_op_type);
       store_at_memory(curr_instruction->dest, "$t1");
@@ -238,7 +314,7 @@ void print_instructions(tnode *node) {
 /**
  * Prints MIPS assembly code for the predefined function println.
  */
-static void print_println() {
+void print_println() {
   print_function_header("println");
   printf(".align 2            \n");
   printf(".data               \n");
@@ -260,7 +336,7 @@ static void print_println() {
  *
  * @param function_name: name of the function
  */
-static void print_function_header(char *function_name) {
+void print_function_header(char *function_name) {
   printf("\n");
   printf("# -------------------------- \n");
   printf("# FUNCTION %s                \n", function_name);
@@ -273,7 +349,7 @@ static void print_function_header(char *function_name) {
  * @param integer: constant integer
  * @param reg: register
  */
-static void load_int_to_register(int integer, char *reg) {
+void load_int_to_register(int integer, char *reg) {
   int high = (integer >> 16);
   int low = (integer & 0xffff);
   if (high == 0) {
@@ -284,7 +360,7 @@ static void load_int_to_register(int integer, char *reg) {
   }
 }
 
-static void load_to_register(symtabnode *addr, char *reg, int dest_type) {
+void load_from_memory(symtabnode *addr, char *reg, int dest_type) {
   if (addr->is_constant) {
     load_int_to_register(addr->const_val, reg);
   } else {
@@ -297,7 +373,7 @@ static void load_to_register(symtabnode *addr, char *reg, int dest_type) {
   }
 }
 
-static void store_at_memory(symtabnode *addr, char *reg) {
+void store_at_memory(symtabnode *addr, char *reg) {
   char mem_op_type;
   if (addr->type == t_Addr) {
     mem_op_type = get_mem_op_type(t_Word);
@@ -312,7 +388,11 @@ static void store_at_memory(symtabnode *addr, char *reg) {
   }
 }
 
-static char *get_operation_name(enum InstructionType type) {
+void copy_from_register(char *reg_src, char *reg_dest) {
+  printf("  la %s, (%s) \n", reg_dest, reg_src);
+}
+
+char *get_operation_name(enum InstructionType type) {
   switch (type) {
   case IT_Plus:
     return "add";
@@ -340,7 +420,7 @@ static char *get_operation_name(enum InstructionType type) {
   }
 }
 
-static char get_mem_op_type(int type) {
+char get_mem_op_type(int type) {
   char mem_op_type;
 
   if (type == t_Char || type == t_Bool) {
@@ -369,4 +449,72 @@ void print_strings() {
       str_node = str_node->next;
     }
   }
+}
+
+char *get_register_name(int reg) {
+  char *name;
+  name = zalloc(4 * sizeof(char));
+  if (reg < 10) { // $t0 - $t9
+    sprintf(name, "$t%d", reg);
+  } else { //$s0 - $s7
+    sprintf(name, "$s%d", reg - 10);
+  }
+
+  return name;
+}
+
+bool is_var_in_memory(symtabnode *var) {
+  return !var->live_range_node || var->live_range_node->reg == -1;
+}
+
+int find_register(symtabnode *var, int default_reg) {
+  int reg = default_reg;
+  gnode *live_range = var->live_range_node;
+  if (live_range && live_range->reg >= 0) {
+    reg = live_range->reg + NUM_RESERVED_REG;
+  }
+
+  return reg;
+}
+
+void load_reg_allocated_variables_from_memory() {
+  //  var_list_node* list_item = get_vars_in_registers();
+  //  if(list_item) {
+  //    printf("\n");
+  //    printf("  # Loading register allocated variables \n");
+  //  }
+  //  while(list_item) {
+  //    symtabnode* var = list_item->var;
+  //    int reg = find_register(var);
+  //    load_from_memory(var, get_register_name(reg), var->type);
+  //
+  //    list_item = list_item->next;
+  //  }
+}
+
+/**
+ * Before calling a function, save registers used to allocate variables into
+ * the memory
+ */
+void save_reg_allocated_variables_in_memory() {
+  //  if(num_used_registers > 0) {
+  //    printf("\n");
+  //    printf("  # Persisting register allocated variables \n");
+  //
+  //    for(int i = 0; i< num_used_registers; i++) {
+  //
+  //    }
+  //  }
+  //  var_list_node* list_item = get_vars_in_registers();
+  //  if(list_item) {
+  //    printf("\n");
+  //    printf("  # Persisting register allocated variables \n");
+  //  }
+  //  while(list_item) {
+  //    symtabnode* var = list_item->var;
+  //    int reg = find_register(var);
+  //    store_at_memory(var, get_register_name(reg));
+  //
+  //    list_item = list_item->next;
+  //  }
 }
