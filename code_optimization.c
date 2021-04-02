@@ -36,7 +36,6 @@ static void detach_copies_from_original(symtabnode *original);
 static void optimize_register_allocation();
 static gnode_list_item *create_interference_graph();
 static void create_interference_graph_connections();
-static symtabnode *get_variable_by_id(int id);
 static void color_graph(gnode_list_item *graph, int k);
 
 void enable_local_optimization() { local_enabled = true; }
@@ -380,15 +379,12 @@ gnode_list_item *create_interference_graph() {
   for (int i = 0; i < table_size; i++) {
     symtabnode *var = entries[i];
     while (var) {
-      if (var->type == t_Array) {
+      if (var->type != t_Array && var->type != t_Addr) {
         // This optimization is not carried out for arrays
-        continue;
+        var->live_range_node = create_graph_node(var->id, n - 1);
+        graph = add_node_to_graph(var->live_range_node, graph);
       }
-
-      var->live_range_node = create_graph_node(var->id, n - 1);
-      graph = add_node_to_graph(var->live_range_node, graph);
       local_variables[var->id] = var;
-
       var = var->next;
     }
   }
@@ -401,7 +397,7 @@ void create_interference_graph_connections() {
   int n = get_total_local_variables();
 
   while (block_list_node) {
-    set live_instructions = clone_set(block_list_node->block->out);
+    set live_now = clone_set(block_list_node->block->out);
 
     inode *curr_instruction = block_list_node->block->last_instruction;
     while (curr_instruction &&
@@ -435,14 +431,14 @@ void create_interference_graph_connections() {
         }
       }
 
-      if (!is_set_empty(lhs_set) && !is_set_empty(live_instructions)) {
+      if (!is_set_empty(lhs_set) && !is_set_empty(live_now)) {
         // Link the live_range node of the variable being assigned to to
         // all the variables in the current live set.
-        set tmp_set = clone_set(live_instructions);
+        set tmp_set = clone_set(live_now);
         for (int i = 0; i < n; i++) {
           if (does_elto_belong_to_set(i, tmp_set)) {
             symtabnode *var = get_variable_by_id(i);
-            if (curr_instruction->dest != var) {
+            if (curr_instruction->dest != var && var->live_range_node) {
               // No self-loops or multiple edges between the same nodes
               add_edge(curr_instruction->dest->live_range_node,
                        var->live_range_node);
@@ -455,8 +451,12 @@ void create_interference_graph_connections() {
         }
       }
 
-      live_instructions = diff_sets(live_instructions, lhs_set);
-      live_instructions = unify_sets(live_instructions, rhs_set);
+      live_now = diff_sets(live_now, lhs_set);
+      live_now = unify_sets(live_now, rhs_set);
+
+      if (curr_instruction->op_type == OP_Call) {
+        curr_instruction->live_at_call = clone_set(live_now);
+      }
 
       curr_instruction = curr_instruction->previous;
     }

@@ -25,7 +25,8 @@ set(CFILES
         reaching_definitions_analysis.c
         liveness_analysis.c
         graph.c
-        stack.c)
+        stack.c
+        max_heap.c)
 
 find_package(BISON 3.7.1)
 find_package(FLEX 2.5.4)

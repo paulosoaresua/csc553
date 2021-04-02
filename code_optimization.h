@@ -37,4 +37,13 @@ void print_blocks_and_instructions(FILE* file);
  */
 void optimize_instructions(tnode* function_body);
 
+/**
+ * Retrieve a pointer to a variable by its id.
+ *
+ * @param id: id
+ *
+ * @return Pointer to symbol table entry
+ */
+symtabnode *get_variable_by_id(int id);
+
 #endif // CSC553_CODE_OPTIMIZATION_H

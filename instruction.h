@@ -62,6 +62,7 @@ typedef struct Instruction {
   // variable
   bnode *block;
   bool dead;
+  set live_at_call; // Set of live variables at the call instruction
 
 } inode;
 
