@@ -28,14 +28,16 @@ void enable_register_allocation_optimization();
  *
  * @param file: file where the instructions must be printed
  */
-void print_blocks_and_instructions(FILE* file);
+void print_blocks_and_instructions(FILE *file);
 
 /**
  * Optimize code.
  *
- * @param function_body: first syntax-tree node of the current parsed function body.
+ * @param function_header: function entry in the symbol table
+ * @param function_body: first syntax-tree node of the current parsed function
+ * body.
  */
-void optimize_instructions(tnode* function_body);
+void optimize_instructions(symtabnode *function_header, tnode *function_body);
 
 /**
  * Retrieve a pointer to a variable by its id.

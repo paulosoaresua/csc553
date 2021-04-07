@@ -21,9 +21,9 @@ extern void yyerror();
 extern void printSyntaxTree(tnode *t, int n, int depth);
 extern void process_function_header(symtabnode *func_header, tnode *body);
 extern void generate_function_code(symtabnode *func_header, tnode *body, int
-lr_type);
+lr_type, int outer_scope_freq);
 extern void process_allocations();
-extern void optimize_instructions(tnode *t);
+extern void optimize_instructions(symtabnode *func_header, tnode *body);
 extern void print_instructions(tnode *t);
 extern void collect_global(symtabnode* var);
 extern void fill_id(symtabnode* var);
@@ -104,9 +104,9 @@ prog
 
 	   /* Code generation */
 	   process_function_header(currFun, currfnbodyTree);
-       generate_function_code(currFun, currfnbodyTree, 1);
+       generate_function_code(currFun, currfnbodyTree, 1, 1);
        process_allocations(currFun);
-       optimize_instructions(currfnbodyTree);
+       optimize_instructions(currFun, currfnbodyTree);
        print_instructions(currfnbodyTree);
 
       CleanupFnInfo(); 

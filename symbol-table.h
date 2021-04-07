@@ -48,6 +48,10 @@ typedef struct stblnode {
   // used if the instruction is an assignment like one).
   struct stblnode* copied_from; // Stored during copy propagation
   var_list_node* copied_to; // List of variables
+  int cost; // Sum of frequencies of usage
+
+  set registers_used; // Store registers used in a function entry
+  bool entered; // Indicates whether the body of the function has been processed
 } symtabnode;
 
 /*********************************************************************

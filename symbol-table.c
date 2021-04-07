@@ -63,6 +63,7 @@ void SymTabInit(int sc) {
       free(var->copied_to);
       var->live_range_node = NULL;
       var->copied_to = NULL;
+      var->entered = false;
       var = next;
     }
     SymTab[sc][i] = NULL;
@@ -143,6 +144,7 @@ symtabnode *SymTabInsert(char *str, int sc) {
   sptr->name = strcpy(sptr->name, str);
   sptr->scope = sc;
   sptr->live_range_node = NULL;
+  sptr->cost = 0;
 
   sptr->next = SymTab[sc][hval];
   SymTab[sc][hval] = sptr;

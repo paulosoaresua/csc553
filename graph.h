@@ -26,6 +26,8 @@ typedef struct GraphNode {
   int num_neighbors;
   gnode_list_item *neighbors;
   set neighbor_set;
+  int cost;
+  set preferential_regs; // Set of preferential registers to use
 } gnode;
 
 /**

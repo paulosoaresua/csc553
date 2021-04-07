@@ -21,8 +21,8 @@ static char get_mem_op_type(int type);
 static char *get_register_name(int reg);
 static bool is_var_in_memory(symtabnode *var);
 static int find_register(symtabnode *var, int default_reg);
-void load_reg_allocated_variables_from_memory(inode* instruction);
-void save_reg_allocated_variables_in_memory(inode* instruction);
+void load_reg_allocated_variables_from_memory(inode *instruction);
+void save_reg_allocated_variables_in_memory(inode *instruction);
 static void reg_to_char(char *reg);
 
 void print_pre_defined_instructions() {
@@ -231,7 +231,7 @@ void print_instructions(tnode *node) {
       printf("  neg %s, %s \n", dest_reg_name, src_reg_name);
       if (is_var_in_memory(curr_instruction->dest)) {
         store_at_memory(curr_instruction->dest, dest_reg_name);
-      } else if(curr_instruction->dest->type == t_Char){
+      } else if (curr_instruction->dest->type == t_Char) {
         reg_to_char(dest_reg_name);
       }
 
@@ -260,7 +260,7 @@ void print_instructions(tnode *node) {
              src2_reg_name);
       if (is_var_in_memory(curr_instruction->dest)) {
         store_at_memory(curr_instruction->dest, dest_reg_name);
-      } else if(curr_instruction->dest->type == t_Char){
+      } else if (curr_instruction->dest->type == t_Char) {
         reg_to_char(dest_reg_name);
       }
       break;
@@ -519,10 +519,12 @@ int find_register(symtabnode *var, int default_reg) {
   return reg;
 }
 
-void load_reg_allocated_variables_from_memory(inode* instruction) {
+void load_reg_allocated_variables_from_memory(inode *instruction) {
   if (!is_set_undefined(instruction->live_at_call)) {
+    bool some_load = true;
     if (!is_set_empty(instruction->live_at_call)) {
-      printf("\n  # From memory to registers \n");
+      printf("\n  # Load registers \n");
+      some_load = false;
     }
     set tmp = clone_set(instruction->live_at_call);
     int i = 0;
@@ -530,12 +532,20 @@ void load_reg_allocated_variables_from_memory(inode* instruction) {
       if (does_elto_belong_to_set(i, tmp)) {
         symtabnode *var = get_variable_by_id(i);
         if (!is_var_in_memory(var)) {
-          int reg = find_register(var, 0);
-          load_from_memory(var, get_register_name(reg), var->type);
+          if (!SRC1(instruction)->entered ||
+              does_elto_belong_to_set(var->live_range_node->reg,
+                                      SRC1(instruction)->registers_used)) {
+            int reg = find_register(var, 0);
+            load_from_memory(var, get_register_name(reg), var->type);
+            some_load = true;
+          }
         }
         remove_from_set(i, tmp);
       }
       i = i + 1;
+    }
+    if (!some_load) {
+      printf("  # > Nothing to load \n");
     }
   }
 }
@@ -546,8 +556,10 @@ void load_reg_allocated_variables_from_memory(inode* instruction) {
  */
 void save_reg_allocated_variables_in_memory(inode *instruction) {
   if (!is_set_undefined(instruction->live_at_call)) {
+    bool some_storage = true;
     if (!is_set_empty(instruction->live_at_call)) {
-      printf("\n  # From registers to memory \n");
+      printf("\n  # Store registers \n");
+      some_storage = false;
     }
     set tmp = clone_set(instruction->live_at_call);
     int i = 0;
@@ -555,12 +567,23 @@ void save_reg_allocated_variables_in_memory(inode *instruction) {
       if (does_elto_belong_to_set(i, tmp)) {
         symtabnode *var = get_variable_by_id(i);
         if (!is_var_in_memory(var)) {
-          int reg = find_register(var, 0);
-          store_at_memory(var, get_register_name(reg));
+          if (!SRC1(instruction)->entered ||
+              does_elto_belong_to_set(var->live_range_node->reg,
+                                      SRC1(instruction)->registers_used)) {
+            // We only save to memory if the register where the variable is
+            // allocated is used inside the function being called or if the
+            // function has not been parsed yet.
+            int reg = find_register(var, 0);
+            store_at_memory(var, get_register_name(reg));
+            some_storage = true;
+          }
         }
         remove_from_set(i, tmp);
       }
       i = i + 1;
+    }
+    if (!some_storage) {
+      printf("  # > Nothing to store \n");
     }
   }
 }
