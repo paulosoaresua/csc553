@@ -26,7 +26,7 @@ set(CFILES
         liveness_analysis.c
         graph.c
         stack.c
-        min_heap.c)
+        heap.c)
 
 find_package(BISON 3.7.1)
 find_package(FLEX 2.5.4)

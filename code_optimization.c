@@ -4,15 +4,15 @@
  */
 
 #include "code_optimization.h"
+#include "heap.h"
 #include "liveness_analysis.h"
-#include "min_heap.h"
 
 static bool local_enabled = false;
 static bool global_enabled = false;
 static bool register_allocation_enabled = false;
 FILE *file_3addr;
 
-static int NUM_REGISTERS = 5; // $t2 - $t9 + $s0 - $s7. The first 2 $ts are
+static int NUM_REGISTERS = 3; // $t2 - $t9 + $s0 - $s7. The first 2 $ts are
                               // reserved for temporary operations and arrays.
 
 static var_list_node *propagated_vars;
@@ -33,8 +33,8 @@ static void attach_variable_to_original(symtabnode *var, symtabnode *original);
 static void detach_variable_from_original(symtabnode *var);
 static void detach_copies_from_original(symtabnode *original);
 static void optimize_register_allocation(symtabnode *function_header);
-static gnode_list_item *create_interference_graph();
-static void create_interference_graph_connections();
+static gnode_list_item *create_interference_graph(symtabnode *function_header);
+static void create_interference_graph_connections(symtabnode *function_header);
 static void color_graph(gnode_list_item *graph, symtabnode *function_header);
 
 void enable_local_optimization() { local_enabled = true; }
@@ -350,9 +350,9 @@ void print_3addr_instructions(inode *instruction_head) {
 
 void optimize_register_allocation(symtabnode *function_header) {
   if (register_allocation_enabled) {
-    gnode_list_item *graph = create_interference_graph();
+    gnode_list_item *graph = create_interference_graph(function_header);
     find_in_and_out_liveness_sets(get_all_blocks());
-    create_interference_graph_connections();
+    create_interference_graph_connections(function_header);
     if (file_3addr) {
       fprintf(file_3addr, "\nInterference Graph:\n\n");
       fprintf(file_3addr, "\nVariable IDs:\n");
@@ -367,15 +367,17 @@ void optimize_register_allocation(symtabnode *function_header) {
   }
 }
 
-gnode_list_item *create_interference_graph() {
+gnode_list_item *create_interference_graph(symtabnode *function_header) {
   gnode_list_item *graph = NULL;
   symtabnode **entries = get_symbol_table_entries(Local);
   int table_size = get_symbol_table_size();
   int n = get_total_local_variables();
 
+  function_header->entered = true;
+  function_header->registers_used = create_empty_set(NUM_REGISTERS);
   // Println is hardcoded, therefore we know that it does not use any os the
   // reserved registers we use here.
-  symtabnode* println_function = SymTabLookup("println", Global);
+  symtabnode *println_function = SymTabLookup("println", Global);
   println_function->entered = true;
   println_function->registers_used = create_empty_set(NUM_REGISTERS);
 
@@ -510,65 +512,94 @@ void color_graph(gnode_list_item *graph, symtabnode *function_header) {
   function_header->registers_used = create_empty_set(NUM_REGISTERS);
 
   // Construct max heap to find variable to spill more efficiently;
-  min_heap *heap = create_empty_heap(get_total_local_variables());
+  // We choose nodes to spill based on the lowest cost and nodes to color
+  // based on the highest cost so that these nodes have a higher change of
+  // getting a register in their preferential list.
+  set nodes_to_spill = create_empty_set(get_total_local_variables());
+  heap *nodes_to_spill_heap =
+      create_empty_heap(get_total_local_variables(), true);
+  heap *nodes_to_color_heap =
+      create_empty_heap(get_total_local_variables(), false);
+  // Store list of nodes in the graph in an array for fast recovery below
+  gnode_list_item *graph_nodes[get_total_local_variables()];
   gnode_list_item *list_item = graph;
   while (list_item) {
-    add_to_heap(list_item, heap);
+    if (list_item->node->num_neighbors < NUM_REGISTERS) {
+      add_to_heap(list_item->node, nodes_to_color_heap);
+    } else {
+      add_to_heap(list_item->node, nodes_to_spill_heap);
+      add_to_set(list_item->node->id, nodes_to_spill);
+    }
+    graph_nodes[list_item->node->id] = list_item;
     list_item = list_item->next;
   }
-  build_heap(heap);
+  build_heap(nodes_to_color_heap);
+  build_heap(nodes_to_spill_heap);
 
   while (graph) {
-    bool any_colored = true;
-    while (any_colored) {
-      any_colored = false;
-      gnode_list_item *list_item = graph;
-      while (list_item) {
-        gnode_list_item *next = list_item->next;
+    while (nodes_to_color_heap->size > 0) {
+      // Choose node with highest cost
+      gnode *node_to_color = extract_heap_root(nodes_to_color_heap);
 
-        if (list_item->node->num_neighbors < NUM_REGISTERS) {
-          set available_regs = create_full_set(NUM_REGISTERS);
-          available_regs =
-              diff_sets(available_regs, list_item->node->regs_to_avoid);
-          if (!is_set_empty(list_item->node->preferential_regs)) {
-            // Choose among a preferential set
-            set tmp = intersect_sets(available_regs,
-                                     list_item->node->preferential_regs);
-            if (!is_set_empty(tmp)) {
-              // Only if the intersection is not empty, we can to choose a
-              // register in the preferential list
-              available_regs = tmp;
-            }
-          }
-          for (int reg = 0; reg < NUM_REGISTERS; reg++) {
-            if (does_elto_belong_to_set(reg, available_regs)) {
-              list_item->node->reg = reg;
-              break;
-            }
-          }
-
-          // Add used register to the function being processed
-          add_to_set(list_item->node->reg, function_header->registers_used);
-
-          // Avoid using the same register in the neighbors of the current node.
-          gnode_list_item *neighbor = list_item->node->neighbors;
-          while (neighbor) {
-            add_to_set(list_item->node->reg, neighbor->node->regs_to_avoid);
-            neighbor = neighbor->next;
-          }
-
-          graph = remove_node_from_graph(list_item, graph);
-          any_colored = true;
+      // Choose register to node
+      set available_regs = create_full_set(NUM_REGISTERS);
+      available_regs =
+          diff_sets(available_regs, node_to_color->regs_to_avoid);
+      if (!is_set_empty(node_to_color->preferential_regs)) {
+        // Choose among a preferential set
+        set tmp = intersect_sets(available_regs,
+                                 node_to_color->preferential_regs);
+        if (!is_set_empty(tmp)) {
+          // Only if the intersection is not empty, we can to choose a
+          // register in the preferential list
+          available_regs = tmp;
         }
-
-        list_item = next;
       }
+      for (int reg = 0; reg < NUM_REGISTERS; reg++) {
+        if (does_elto_belong_to_set(reg, available_regs)) {
+          node_to_color->reg = reg;
+          break;
+        }
+      }
+
+      // Add used register to the function being processed
+      add_to_set(node_to_color->reg, function_header->registers_used);
+
+      // Add more nodes to be colored and avoid using the same register in the
+      // neighbors of the current node.
+      gnode_list_item *neighbor = node_to_color->neighbors;
+      while (neighbor) {
+        add_to_set(node_to_color->reg, neighbor->node->regs_to_avoid);
+
+        if (neighbor->node->num_neighbors == NUM_REGISTERS) {
+          remove_from_set(neighbor->node->id, nodes_to_spill);
+          add_to_heap(graph_nodes[neighbor->node->id]->node, nodes_to_color_heap);
+        }
+        neighbor = neighbor->next;
+      }
+
+      graph = remove_node_from_graph(graph_nodes[node_to_color->id], graph);
+      build_heap(nodes_to_color_heap);
     }
 
-    if (graph) {
-      // Spill the node with highest cost
-      gnode_list_item *node_to_spill = extract_heap_root(heap);
-      graph = remove_node_from_graph(node_to_spill, graph);
+    gnode *node_to_spill = extract_heap_root(nodes_to_spill_heap);
+    while (node_to_spill &&
+           !does_elto_belong_to_set(node_to_spill->id, nodes_to_spill)) {
+      // Nodes can have been removed from the spill set as others were colored.
+      node_to_spill = extract_heap_root(nodes_to_spill_heap);
+    }
+
+    if (node_to_spill) {
+      // As we spill a node, other might be eligible to be colored.
+      gnode_list_item *neighbor = node_to_spill->neighbors;
+      while (neighbor) {
+        if (neighbor->node->num_neighbors == NUM_REGISTERS) {
+          add_to_heap(neighbor->node, nodes_to_color_heap);
+        }
+        neighbor = neighbor->next;
+      }
+
+      graph = remove_node_from_graph(graph_nodes[node_to_spill->id], graph);
     }
   }
 }

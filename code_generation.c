@@ -36,7 +36,6 @@ void process_function_header(symtabnode *func_header, tnode *body) {
   // Therefore, we need to create an Enter instruction for it.
   inode *instruction = create_instruction(OP_Enter, func_header, NULL, NULL);
   append_instruction(instruction, body);
-  func_header->entered = true;
 
   // Clear globals
   global_head = NULL;

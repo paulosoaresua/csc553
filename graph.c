@@ -112,7 +112,7 @@ gnode_list_item *remove_node_from_graph(gnode_list_item *graph_item,
 
   // Remove node from the list of nodes in the graph
   graph_item->node->neighbors = NULL;
-  graph_item->node->num_neighbors = 0;
+  graph_item->node = NULL;
   gnode_list_item *new_head = graph_head;
   if (graph_item == graph_head) {
     new_head = graph_item->next;
