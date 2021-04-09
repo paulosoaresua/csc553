@@ -21,9 +21,11 @@ static char get_mem_op_type(int type);
 static char *get_register_name(int reg);
 static bool is_var_in_memory(symtabnode *var);
 static int find_register(symtabnode *var, int default_reg);
-void load_reg_allocated_variables_from_memory(inode *instruction);
-void save_reg_allocated_variables_in_memory(inode *instruction);
+static void load_reg_allocated_variables_from_memory(inode *instruction);
+static void save_reg_allocated_variables_in_memory(inode *instruction);
 static void reg_to_char(char *reg);
+static void save_registers_at_function_enter(symtabnode *function_ptr);
+static void restore_callee_saved_registers(symtabnode* function_ptr);
 
 void print_pre_defined_instructions() {
   print_println();
@@ -87,9 +89,7 @@ void print_instructions(tnode *node) {
       symtabnode *function_ptr = SRC1(curr_instruction);
       print_function_header(function_ptr->name);
       printf("_%s:              \n", function_ptr->name);
-      printf("  la $sp, -8($sp) \n");
-      printf("  sw $fp, 4($sp)  \n");
-      printf("  sw $ra, 0($sp)  \n");
+      save_registers_at_function_enter(function_ptr);
       printf("  la $fp, 0($sp)  \n");
       printf("  la $sp, %d($sp) \n", -function_ptr->byte_size);
       break;
@@ -184,6 +184,12 @@ void print_instructions(tnode *node) {
       load_reg_allocated_variables_from_memory(curr_instruction);
       break;
     }
+
+    case OP_Leave:
+      printf("\n");
+      printf("  # OP_Leave    \n");
+      restore_callee_saved_registers(SRC1(curr_instruction));
+      break;
 
     case OP_Return:
       printf("\n");
@@ -535,9 +541,11 @@ void load_reg_allocated_variables_from_memory(inode *instruction) {
           if (!SRC1(instruction)->entered ||
               does_elto_belong_to_set(var->live_range_node->reg,
                                       SRC1(instruction)->registers_used)) {
-            int reg = find_register(var, 0);
-            load_from_memory(var, get_register_name(reg), var->type);
-            some_load = true;
+            if(var->live_range_node->reg < 8) { // One of the $t registers
+              int reg = find_register(var, 0);
+              load_from_memory(var, get_register_name(reg), var->type);
+              some_load = true;
+            }
           }
         }
         remove_from_set(i, tmp);
@@ -570,12 +578,14 @@ void save_reg_allocated_variables_in_memory(inode *instruction) {
           if (!SRC1(instruction)->entered ||
               does_elto_belong_to_set(var->live_range_node->reg,
                                       SRC1(instruction)->registers_used)) {
-            // We only save to memory if the register where the variable is
-            // allocated is used inside the function being called or if the
-            // function has not been parsed yet.
-            int reg = find_register(var, 0);
-            store_at_memory(var, get_register_name(reg));
-            some_storage = true;
+            if(var->live_range_node->reg < 8) { // One of the $t registers
+              // We only save to memory if the register where the variable is
+              // allocated is used inside the function being called or if the
+              // function has not been parsed yet.
+              int reg = find_register(var, 0);
+              store_at_memory(var, get_register_name(reg));
+              some_storage = true;
+            }
           }
         }
         remove_from_set(i, tmp);
@@ -592,4 +602,50 @@ void reg_to_char(char *reg) {
   printf("\n  # Conversion to char with sign-extension \n");
   printf("  sll %s, %s, 24 \n", reg, reg);
   printf("  sra %s, %s, 24 \n", reg, reg);
+}
+
+void save_registers_at_function_enter(symtabnode *function_ptr) {
+  int num_callee_saved_registers = 0;
+
+  // s0 - s7
+  for(int reg = 8; reg < function_ptr->registers_used.max_size; reg++) {
+    if(does_elto_belong_to_set(reg, function_ptr->registers_used)) {
+      num_callee_saved_registers++;
+    }
+  }
+  // fp + ra + callee-saved
+  int bytes_in_memory = 8 + 4 * num_callee_saved_registers;
+  printf("  la $sp, -%d($sp) \n", bytes_in_memory);
+
+  // Store registers in memory
+  int pos = 0;
+  for(int reg = 8; reg < function_ptr->registers_used.max_size; reg++) {
+    if(does_elto_belong_to_set(reg, function_ptr->registers_used)) {
+      char* reg_name = get_register_name(reg + 2); // Index starts in $t2
+      printf("  sw %s, %d($sp)  \n", reg_name, pos);
+      pos += 4;
+    }
+  }
+  printf("  sw $fp, %d($sp)  \n", pos + 4);
+  printf("  sw $ra, %d($sp)  \n", pos);
+}
+
+void restore_callee_saved_registers(symtabnode* function_ptr) {
+  int pos = 0;
+  for(int reg = 8; reg < function_ptr->registers_used.max_size; reg++) {
+    if(does_elto_belong_to_set(reg, function_ptr->registers_used)) {
+      char* reg_name = get_register_name(reg + 2); // Index starts in $t2
+      if (pos == 0) {
+        printf("  la $sp, 0($fp)  \n");
+      }
+      printf("  lw %s, %d($sp)  \n", reg_name, pos);
+      pos += 4;
+    }
+  }
+  if (pos > 0) {
+    // Move the frame pointer to where the return register is in the stack
+    printf("  la $fp, %d($fp) \n", pos);
+  } else {
+    printf("#  No callee-saved registers to restore");
+  }
 }

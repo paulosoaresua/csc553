@@ -12,7 +12,7 @@ static bool global_enabled = false;
 static bool register_allocation_enabled = false;
 FILE *file_3addr;
 
-static int NUM_REGISTERS = 3; // $t2 - $t9 + $s0 - $s7. The first 2 $ts are
+static int NUM_REGISTERS = 16; // $t2 - $t9 + $s0 - $s7. The first 2 $ts are
                               // reserved for temporary operations and arrays.
 
 static var_list_node *propagated_vars;

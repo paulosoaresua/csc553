@@ -173,6 +173,9 @@ void generate_function_code(symtabnode *func_header, tnode *node, int lr_type,
   }
 
   case Return:
+    instruction = create_instruction(OP_Leave, func_header, NULL, NULL);
+    append_instruction(instruction, node);
+
     if (stReturn(node)) {
       generate_function_code(func_header, stReturn(node), R_VALUE,
                              outer_scope_freq);
