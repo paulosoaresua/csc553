@@ -256,7 +256,7 @@ void print_instructions(tnode *node) {
         load_from_memory(SRC1(curr_instruction), src1_reg_name,
                          SRC1(curr_instruction)->type);
       }
-      if (is_var_in_memory(SRC1(curr_instruction))) {
+      if (is_var_in_memory(SRC2(curr_instruction))) {
         load_from_memory(SRC2(curr_instruction), src2_reg_name,
                          SRC2(curr_instruction)->type);
       }

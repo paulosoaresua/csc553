@@ -133,7 +133,37 @@ the cost of the outer scope multiplied by the incurring cost of the instructions
 
 5. Type conversion
 
-TODO xxxx
+When we are working writing and loading values to and from memory, storing a
+char in a register is handled directly by the sb,lb instructions. When we
+perform register allocation, on the other hand, there is no instruction to load
+a char immediately or to move just the least significant byte with signal
+ preservation between registers. Therefore, whenever we are loading a value
+ to a char variable stored in a register, we need to make sure to mimic what lb
+ does under the hood so that we can guarantee we are not breaking type
+ conversion and overflow handling.
+
+To do that, after loading a value to a register (reg) reserved to hold the value
+ of a char variable, I add the following extra code to perform sign extension:
+
+sll reg, reg, 24
+sra reg, reg, 24
+
+6. Coalescence
+
+I realized that the algorithm provided in the slides already handles coalescence
+for the case in which we use one live range per variable. This is because the
+LiveNow set is updated only after the edges had been created in a specific
+iteration. Therefore, when edges for an instruction of the type y = x are
+created, if that's the last occurrence of x, x will not be in the LiveNow set
+yet, which will prevent y and x to be connected in the graph, and therefore,
+they will be able to share a register.
+
+Whenever two variables coalesce, this might result in an instruction like
+
+move reg, reg
+
+because both variables can share the same register. This is a void instruction
+that do not generate in the final assembly code.
 
 --------------------------
 | ORDER OF OPTIMIZATIONS |
@@ -162,100 +192,69 @@ The programs used in this section are in the directory eval/a3.
 
 - Program 1
 
-This program explores the effect of peephole on code optimization. It contains
-each one of the instructions that can be optimized by the peephole approach.
-By suppressing copy propagation, we can see that all credits on the reduction
-of number of write and branch instructions goes to peephole in this
-sample program. Here are the results reported by spim before and after
-optimization:
+This program is the 4th program I experimented with in the previous assignment.
+It consists of a merge of 3 other programs that were individually coded to
+explore gains of specific types of local and global optimizations. I chose this
+program to start this section to check how much more improvement register
+allocation can bring to the final machine code.
 
-Before Optimization
-Stats -- #instructions : 178
-         #reads : 60  #writes 47  #branches 17  #other 54
-
-After Optimization (peephole only)
-Stats -- #instructions : 153
-         #reads : 48  #writes 35  #branches 16  #other 54
-
-After Optimization (peephole only + copy propagation)
-Stats -- #instructions : 153
-         #reads : 27  #writes 35  #branches 16  #other 75
-
-Considering only peephole: 20% reduction in the number of read instructions and
-25% reduction in the number of write instructions due to optimizations c and d.
-And 5% reduction in the number of branch instructions due to optimizations a and
- b.
-
-- Program 2
-
-This programs explores the effect of copy propagation on code optimization. It
-contains a series of consecutive assignment instructions that can be propagated
-by transitivity. Discounting the single write instruction optimized by peephole
-(optimization d), the expressive reduction in the number of read instructions
-is all due to copy propagation.
-
-Before Optimization
-Stats -- #instructions : 61
-         #reads : 23  #writes 23  #branches 3  #other 12
-
-After Optimization
-Stats -- #instructions : 59
-         #reads : 3  #writes 22  #branches 3  #other 31
-
-87% reduction in the number of read instructions.
-
-- Program 3
-
-This programs explores the effect of dead code elimination on a program with
-three blocks comprised of instructions that are all dead.
-
-Before Optimization
-Stats -- #instructions : 85
-         #reads : 25  #writes 25  #branches 7  #other 28
-
-After Optimization
-Stats -- #instructions : 47
-         #reads : 7  #writes 6  #branches 7  #other 27
-
-72% reduction in the number of read instructions and 76% reduction in the number
- of write instructions. The resultant optimized code does not contain any
- assignment instructions but the ones necessary to assign a constant to a
- temporary variable that is, in turn, used as parameter to the println function
-  call.
-
-- Program 4
-
-This program is a merge of the previous 3 programs. I aim to explore the
-contribution of each optimization individually and as a whole.
+Below are the results of register allocation optimization compared to what I got
+ previously.
 
 Before Optimization
 Stats -- #instructions : 318
          #reads : 113  #writes 102  #branches 23  #other 80
 
-After Optimization (peephole only)
-Stats -- #instructions : 271
-         #reads : 90  #writes 79  #branches 22  #other 80
-
-After Optimization (peephole + copy propagation)
-Stats -- #instructions : 271
-         #reads : 42  #writes 79  #branches 22  #other 128
-
-After Optimization (dead code elimination only)
-Stats -- #instructions : 218
-         #reads : 65  #writes 52  #branches 23  #other 78
-
-After Optimization(local + global optimization)
+After Optimization(local + global)
 Stats -- #instructions : 145
          #reads : 29  #writes 16  #branches 22  #other 78
 
+After Optimization(register allocation only)
+Stats -- #instructions : 128
+         #reads : 6  #writes 5  #branches 23  #other 94
 
-The more we use combined optimization methods, the more instructions we can
-discard in the code. One thing to notice here is the effect of local
-optimization followed by a global one. The copy propagation process created some
- dead instructions that could be later removed by dead code elimination,
- causing a reduction of 65% in the number of read instructions (from 65 to 29)
- and 70% in the number of dead instructions (from 52 to 16) compared to the
- number of read/write instructions after dead code elimination alone.
+After Optimization(local + global + register allocation)
+Stats -- #instructions : 111
+         #reads : 6  #writes 5  #branches 22  #other 78
+
+This is an incredible result. Register allocation by itself was able to
+cause a reduction of 95% write and load instructions compared to the
+unoptimized generated code, surpassing local + global optimization performance
+in terms of these memory intensive instructions. Compared to the code optimized
+by local and global methods, it represents a reduction of 79% in write and load
+instructions.
+
+It's important to highlight, however, that register allocation increases the
+number of other instructions, which involves operations with registers. Local and
+ global optimizations can help with this by eliminating unnecessary
+ intermediary code, which, by consequence, reduces the number of instructions
+ and, sometimes, the number of registers needed to be allocated. We see
+ that the final optimized code (after the application of all 3 types of
+ optimizations implemented) is more efficient than the original code in terms
+  of all kinds of instructions: write, load, branches and other.
+
+- Program 2
+
+Another function 8 registers in a function and 8 registers in another function.
+
+- Program 3
+
+16 registers per function.
+
+- Program 4
+
+16 registers needed in a function and 4 registers needed in another function.
+Check if it allocates the costlier variables first.
+
+- Program 5
+
+Check runtime
+
+
+-----------------------
+
+
+
 
 - Program 5
 
