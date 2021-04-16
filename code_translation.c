@@ -329,8 +329,10 @@ void print_instructions(tnode *node) {
       // Find the correct memory address of the index
       if (SRC2(curr_instruction)->elt_type == t_Int) {
         printf("  sll $t0, %s, 2  \n", src_reg_name);
+        printf("  add %s, $t0, $t1 \n", dest_reg_name);
+      } else {
+        printf("  add %s, %s, $t1 \n", dest_reg_name, src_reg_name);
       }
-      printf("  add %s, $t0, $t1 \n", dest_reg_name);
       if (is_var_in_memory(curr_instruction->dest)) {
         store_at_memory(curr_instruction->dest, dest_reg_name);
       }
