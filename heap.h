@@ -6,7 +6,7 @@
 #ifndef CSC553_HEAP_H
 #define CSC553_HEAP_H
 
-#import "graph.h"
+#include "graph.h"
 
 typedef struct Heap {
   gnode** items;

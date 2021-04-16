@@ -375,11 +375,6 @@ gnode_list_item *create_interference_graph(symtabnode *function_header) {
 
   function_header->entered = true;
   function_header->registers_used = create_empty_set(NUM_REGISTERS);
-  // Println is hardcoded, therefore we know that it does not use any os the
-  // reserved registers we use here.
-  symtabnode *println_function = SymTabLookup("println", Global);
-  println_function->entered = true;
-  println_function->registers_used = create_empty_set(NUM_REGISTERS);
 
   local_variables = zalloc(n * sizeof(symtabnode *));
 
@@ -394,6 +389,8 @@ gnode_list_item *create_interference_graph(symtabnode *function_header) {
         var->live_range_node->preferential_regs =
             create_full_set(NUM_REGISTERS);
         graph = add_node_to_graph(var->live_range_node, graph);
+      }
+      if(!var->formal) {
         local_variables[var->id] = var;
       }
       var = var->next;
@@ -439,6 +436,17 @@ void create_interference_graph_connections(symtabnode *function_header) {
             !SRC2(curr_instruction)->is_constant &&
             SRC2(curr_instruction)->type != t_Addr) {
           add_to_set(SRC2(curr_instruction)->id, rhs_set);
+        }
+      }
+
+      if (curr_instruction->op_type == OP_Call &&
+          SRC1(curr_instruction)->name == "println") {
+        // Println is hardcoded, therefore we know that it does not use any os
+        // the reserved registers we use here.
+        symtabnode *println_function = SRC1(curr_instruction);
+        if (!println_function->entered) {
+          println_function->entered = true;
+          println_function->registers_used = create_empty_set(NUM_REGISTERS);
         }
       }
 
