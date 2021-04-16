@@ -13,7 +13,7 @@ static bool register_allocation_enabled = false;
 FILE *file_3addr;
 
 static int NUM_REGISTERS = 16; // $t2 - $t9 + $s0 - $s7. The first 2 $ts are
-                              // reserved for temporary operations and arrays.
+                               // reserved for temporary operations and arrays.
 
 static var_list_node *propagated_vars;
 
@@ -386,7 +386,7 @@ gnode_list_item *create_interference_graph(symtabnode *function_header) {
   for (int i = 0; i < table_size; i++) {
     symtabnode *var = entries[i];
     while (var) {
-      if (var->type != t_Array && var->type != t_Addr) {
+      if (var->type != t_Array && var->type != t_Addr && !var->formal) {
         // This optimization is not carried out for arrays
         var->live_range_node = create_graph_node(var->id, n - 1);
         var->live_range_node->cost = var->cost;
@@ -394,8 +394,8 @@ gnode_list_item *create_interference_graph(symtabnode *function_header) {
         var->live_range_node->preferential_regs =
             create_full_set(NUM_REGISTERS);
         graph = add_node_to_graph(var->live_range_node, graph);
+        local_variables[var->id] = var;
       }
-      local_variables[var->id] = var;
       var = var->next;
     }
   }
@@ -470,7 +470,9 @@ void create_interference_graph_connections(symtabnode *function_header) {
                   diff_sets(var->live_range_node->preferential_regs,
                             SRC1(curr_instruction)->registers_used);
             } else {
-              if (curr_instruction->dest != var && var->live_range_node) {
+              if (curr_instruction->dest != var &&
+                  curr_instruction->dest->live_range_node &&
+                  var->live_range_node) {
                 // No self-loops or multiple edges between the same nodes
                 add_edge(curr_instruction->dest->live_range_node,
                          var->live_range_node);
@@ -543,12 +545,11 @@ void color_graph(gnode_list_item *graph, symtabnode *function_header) {
 
       // Choose register to node
       set available_regs = create_full_set(NUM_REGISTERS);
-      available_regs =
-          diff_sets(available_regs, node_to_color->regs_to_avoid);
+      available_regs = diff_sets(available_regs, node_to_color->regs_to_avoid);
       if (!is_set_empty(node_to_color->preferential_regs)) {
         // Choose among a preferential set
-        set tmp = intersect_sets(available_regs,
-                                 node_to_color->preferential_regs);
+        set tmp =
+            intersect_sets(available_regs, node_to_color->preferential_regs);
         if (!is_set_empty(tmp)) {
           // Only if the intersection is not empty, we can to choose a
           // register in the preferential list
@@ -573,7 +574,8 @@ void color_graph(gnode_list_item *graph, symtabnode *function_header) {
 
         if (neighbor->node->num_neighbors == NUM_REGISTERS) {
           remove_from_set(neighbor->node->id, nodes_to_spill);
-          add_to_heap(graph_nodes[neighbor->node->id]->node, nodes_to_color_heap);
+          add_to_heap(graph_nodes[neighbor->node->id]->node,
+                      nodes_to_color_heap);
         }
         neighbor = neighbor->next;
       }
