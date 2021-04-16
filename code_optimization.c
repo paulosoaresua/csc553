@@ -349,7 +349,7 @@ void print_3addr_instructions(inode *instruction_head) {
 }
 
 void optimize_register_allocation(symtabnode *function_header) {
-  if (register_allocation_enabled) {
+  if (register_allocation_enabled && get_total_local_variables() > 0) {
     gnode_list_item *graph = create_interference_graph(function_header);
     find_in_and_out_liveness_sets(get_all_blocks());
     create_interference_graph_connections(function_header);

@@ -6,8 +6,8 @@
 #ifndef CSC553_GRAPH_H
 #define CSC553_GRAPH_H
 
-#import "global.h"
-#import "set.h"
+#include "global.h"
+#include "set.h"
 
 typedef struct GraphNode gnode;
 

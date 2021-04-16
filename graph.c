@@ -1,7 +1,5 @@
 #include "graph.h"
 
-#include "global.h"
-
 gnode_list_item *create_graph() {
   gnode_list_item *graph_head = zalloc(sizeof(gnode_list_item *));
   graph_head->node = NULL;
