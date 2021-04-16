@@ -390,7 +390,7 @@ gnode_list_item *create_interference_graph(symtabnode *function_header) {
             create_full_set(NUM_REGISTERS);
         graph = add_node_to_graph(var->live_range_node, graph);
       }
-      if(!var->formal) {
+      if (!var->formal) {
         local_variables[var->id] = var;
       }
       var = var->next;
@@ -471,19 +471,20 @@ void create_interference_graph_connections(symtabnode *function_header) {
           if (does_elto_belong_to_set(i, tmp_set)) {
             symtabnode *var = get_variable_by_id(i);
 
-            if (is_call_to_pre_parsed_function) {
-              // Remove from the preferential registers set of a variable,
-              // the registers used inside the function being called.
-              var->live_range_node->preferential_regs =
-                  diff_sets(var->live_range_node->preferential_regs,
-                            SRC1(curr_instruction)->registers_used);
-            } else {
-              if (curr_instruction->dest != var &&
-                  curr_instruction->dest->live_range_node &&
-                  var->live_range_node) {
-                // No self-loops or multiple edges between the same nodes
-                add_edge(curr_instruction->dest->live_range_node,
-                         var->live_range_node);
+            if (var->live_range_node) {
+              if (is_call_to_pre_parsed_function) {
+                // Remove from the preferential registers set of a variable,
+                // the registers used inside the function being called.
+                var->live_range_node->preferential_regs =
+                    diff_sets(var->live_range_node->preferential_regs,
+                              SRC1(curr_instruction)->registers_used);
+              } else {
+                if (curr_instruction->dest != var &&
+                    curr_instruction->dest->live_range_node) {
+                  // No self-loops or multiple edges between the same nodes
+                  add_edge(curr_instruction->dest->live_range_node,
+                           var->live_range_node);
+                }
               }
             }
             remove_from_set(i, tmp_set);

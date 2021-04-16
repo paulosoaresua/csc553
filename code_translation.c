@@ -160,8 +160,6 @@ void print_instructions(tnode *node) {
         // When a function passes one of its formal to another, just copy
         // the whole word if it stores a memory address
         load_from_memory(SRC1(curr_instruction), reg_name, t_Word);
-        printf("  la $sp, -4($sp)  \n");
-        printf("  sw $t0, 0($sp)   \n");
       } else {
         if (is_var_in_memory(SRC1(curr_instruction))) {
           load_from_memory(SRC1(curr_instruction), reg_name,
