@@ -1,6 +1,8 @@
 extern void println(int x);
 
-/** To test the effect of local and global optimization. **/
+/**
+ * To test the effect of local, global and register allocation optimization.
+ **/
 
 void main(void)
 {

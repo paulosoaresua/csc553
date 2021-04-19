@@ -355,15 +355,24 @@ void optimize_register_allocation(symtabnode *function_header) {
     create_interference_graph_connections(function_header);
     if (file_3addr) {
       fprintf(file_3addr, "\nInterference Graph:\n\n");
-      fprintf(file_3addr, "\nVariable IDs:\n");
-      for (int i = 0; i < get_total_local_variables(); i++) {
-        fprintf(file_3addr, "%s: %d\n", local_variables[i]->name,
-                (int)local_variables[i]->id);
-      }
       fprintf(file_3addr, "\nAdjacency List:\n");
       print_graph(graph, file_3addr);
     }
     color_graph(graph, function_header);
+    if (file_3addr) {
+      fprintf(file_3addr, "\nVariable IDs:\n");
+      for (int i = 0; i < get_total_local_variables(); i++) {
+        if(local_variables[i]->live_range_node) {
+          fprintf(file_3addr, "%s: [id: %d] [cost: %d] [reg: %d]\n",
+                  local_variables[i]->name, (int)local_variables[i]->id,
+                  local_variables[i]->cost, local_variables[i]->live_range_node->reg);
+        }else {
+          fprintf(file_3addr, "%s: [id: %d] [cost: %d] \n",
+                  local_variables[i]->name, (int)local_variables[i]->id,
+                  local_variables[i]->cost);
+        }
+      }
+    }
   }
 }
 
@@ -440,7 +449,7 @@ void create_interference_graph_connections(symtabnode *function_header) {
       }
 
       if (curr_instruction->op_type == OP_Call &&
-          SRC1(curr_instruction)->name == "println") {
+          strcmp(SRC1(curr_instruction)->name, "println") == 0) {
         // Println is hardcoded, therefore we know that it does not use any os
         // the reserved registers we use here.
         symtabnode *println_function = SRC1(curr_instruction);
@@ -551,6 +560,14 @@ void color_graph(gnode_list_item *graph, symtabnode *function_header) {
     while (nodes_to_color_heap->size > 0) {
       // Choose node with highest cost
       gnode *node_to_color = extract_heap_root(nodes_to_color_heap);
+      // Uncomment code below to choose the next node to color with no
+      // assumptions about the cost of a variable
+      // gnode_list_item* node = graph;
+      // while(node && node->node->num_neighbors >= NUM_REGISTERS) {
+      //   node = node->next;
+      // }
+      // node_to_color = node->node;
+      // Ends here
 
       // Choose register to node
       set available_regs = create_full_set(NUM_REGISTERS);
@@ -599,6 +616,19 @@ void color_graph(gnode_list_item *graph, symtabnode *function_header) {
       // Nodes can have been removed from the spill set as others were colored.
       node_to_spill = extract_heap_root(nodes_to_spill_heap);
     }
+
+    // Uncomment code below to choose the next node to spill with no
+    // assumptions about the cost of a variable
+//    gnode_list_item* node = graph;
+//    while(node && node->node->num_neighbors < NUM_REGISTERS) {
+//      node = node->next;
+//    }
+//    if (node) {
+//      node_to_spill = node->node;
+//    } else {
+//      node_to_spill = NULL;
+//    }
+    // Ends here
 
     if (node_to_spill) {
       // As we spill a node, other might be eligible to be colored.

@@ -4,41 +4,49 @@
 
 1. Scope
 
-This implementation does not perform register allocation for global variables
-and array locations. Moreover, I use a single live range per variable.
+This implementation does not allocate global variables, array locations, or
+function parameters to registers. Moreover, I use a single live range per
+variable.
 
 Coalescence is performed, but I figured it is already covered by the given
-algorithm. At least for the single live range per variable scenario.
+algorithm. At least for the single-live-range-per-variable scenario.
+
+I implemented some sort of interference detection between functions. Whenever a
+function is called after its implementation, it is possible for the compiler to
+know the registers that were used by the callee, and then use this information
+to better distribute variables across registers and reduce allocation conflicts.
 
 2. Registers used
 
-In this implementation I use a set of 16 registers for variable allocation:
-$t2 - $t10
+In this implementation I used a set of 16 registers for long-term allocation:
+$t2 - $t9
 $s0 - $s7
 
-Registers $t0 and $t1 are reserved for intermediary operations and are never
-used for long-term storage of a live range.
+Registers $t0 and $t1 were reserved for intermediary operations only.
 
-3. Caller/callee saving procedure
+3. Caller/callee register saving procedure
 
 Registers from $t2 to $t10 are saved and restored by the caller before and
 right after a function call. On the other hand, registers from $s0 to $s7 are
-written to memory by the callee in its ENTER and restored back in this LEAVE
-instructions.
+written to memory and restored by the callee in its ENTER and LEAVE sections
+respectively.
 
 When I first executed this optimization, the aforementioned procedure actually
 increased the number of writes and reads from memory because of the
 indiscriminate savings and loadings to and from memory at every function call.
-To reduce the number of write and load operations, I keep a set of registers
-used in a function and I only save and restore registers that are used inside
-that function.
+To reduce the number of write and load instructions, I keep a set of registers
+used in a function and the caller only saves and restores registers before/after
+ a function call if the two following conditions hold:
+
+1. The variables for which the registers are holding values are live after the
+function call;
+2. The registers are used by the callee.
 
 If a function being called has not been parsed yet (function definition delayed)
-, I make no assumptions and I save all the registers that will be used in the
-caller later (registers reserved for variables live after the function call)
-before invoking the callee. In most of the cases, function definitions will be
- given before they are called by another function, therefore, this issue
- shouldn't happen often.
+, I make no assumptions and I save all the registers reserved for variables
+live after the function call before invoking the callee. In most cases, function
+ definitions will be given before they are called by another function.
+Therefore, this issue should not happen often.
 
 Also, I made sure that the set of registers used by a function is updated in
 such a way that in the end it also includes any registers used by other
@@ -49,11 +57,11 @@ it, I manually defined the set of registers used in that function to empty.
 
 3. Choosing registers to allocate
 
-I made a slight modification to the original algorithms to reduce register
-clashing. Before I describe them, consider the following definitions
+I made a slight modification to the original algorithms to reduce clashes in the
+ choice of registers. Before I describe them, consider the following definitions
 
-- Node: A variable's live range (sometimes I will abuse this definition and I
-will use node and variable interchangeably. Hopefully, it will be clear from the
+- Node: A variable's live range (sometimes I will abuse this definition by using
+ node and variable interchangeably. Hopefully, it will be clear from the
  context whenever I do so).
 - AvoidSet: Set of registers that cannot be used by a node. Every node in the
 graph has its own AvoidSet.
@@ -66,15 +74,17 @@ a. Constructing the interference graph
 2. Proceed with the original algorithm.
 3. Whenever a CALL instruction is processed, for every variable in LiveNow set
 at that point, remove the registers used in the function being called from
-those variables' PrefSet.
+these variables' PrefSet.
 
 In the end, the PrefSet for each node will contain registers that are not used
 by functions called when the node's variable is live. If we can allocate
 some nodes to one of the registers in their PrefSet, this will reduce the number
- of caller saves/loads needed at function calls.
-
-As it will be clear next, even if this PrefSet for a node is not empty, it's not
-guaranteed that we will be able to use a register from it for that node.
+ of caller saves/loads needed at function calls. This is the inter-function
+interference detection I briefly commented in the beginning of this document.
+It works as a soft constraint on the registers a variable can be allocated to.
+Therefore, as it will be clear next, even if this PrefSet for a node is not
+empty, it is not guaranteed that we will be able to use a register from it for
+that node.
 
 b. Coloring the graph
 
@@ -83,8 +93,8 @@ registers.
 
 1. Initialize the AvoidSet of each node with an empty set of registers.
 2. REPEAT
-3.   get node with highest cost from the list of nodes with < K neighbors
-4.   remove node from the graph
+3.   get the node with the highest cost in the list of nodes with < K neighbors
+4.   remove this node from the graph
 5.   IF node's PrefSet - nodes's AvoidSet is empty THEN
 6.	 	AvailableSet = RSet - nodes's AvoidSet
 7.   ELSE
@@ -99,21 +109,25 @@ Let's go over the modifications introduced to understand the intuition behind
 them.
 
 In line 3, instead of picking an arbitrary node with fewer than K neighbors
-from the graph, I choose the one with highest cost to increase the likelihood of
- being able to allocate high cost variables to one of the registers in their
- PrefSet. Notice that as I color the graph, I include elements to some nodes'
- AvoidSet. If we delay the evaluation of a node, we might end up with a
+from the graph, I choose the one with the highest cost to increase the
+likelihood of being able to allocate high-cost variables to one of the registers
+ in their PrefSet. Notice that as I color the graph, I include elements to some
+ nodes' AvoidSet. If we delay the evaluation of a node, we might end up with a
  situation where all the registers in its PrefSet are also in its AvoidSet (line
-  6), forcing us to pick a register that will be stored/retrieved from memory by
-   a the caller at some point. Processing the nodes with higher cost first will
-   reduce the amount of times this issue happens with high cost variables.
+ 6), forcing us to pick a register that will be stored/retrieved from memory by
+ the caller at some point. Processing the nodes with higher cost first will
+ reduce the number of times this situation happens with high-cost variables.
 
-Finally, line 11 is necessary so we don't end up allocating the same register
+Finally, line 11 is necessary so we do not end up allocating the same register
 for two neighbor live ranges.
 
 At the end of this algorithm, the variables will already be informed about the
 registers they must use in the generated assembly code.
 
+A final note is that the allocation process gives preference to registers $t
+inside AvailableSet. Registers of type $s are only used if there is no other $t
+available. This reduces the number of write/load instructions in the callee
+register saving procedure.
 
 4. Cost of a variable
 
@@ -127,9 +141,9 @@ over the AST. I used the following atomic instruction costs:
 - Cost in a loop update and evaluation: 10
 - Cost in a loop body: 10
 
-The cost is processed recursively, thus variables in a nested scope will yield
-the cost of the outer scope multiplied by the incurring cost of the instructions
- they are in in the inner scope.
+The cost is processed recursively, thus variables in a nested scope will
+accumulate the cost of the outer scope multiplied by the incurring cost of the
+instructions they are in the inner scope.
 
 5. Type conversion
 
@@ -137,10 +151,10 @@ When we are working writing and loading values to and from memory, storing a
 char in a register is handled directly by the sb,lb instructions. When we
 perform register allocation, on the other hand, there is no instruction to load
 a char immediately or to move just the least significant byte with signal
- preservation between registers. Therefore, whenever we are loading a value
- to a char variable stored in a register, we need to make sure to mimic what lb
- does under the hood so that we can guarantee we are not breaking type
- conversion and overflow handling.
+preservation between registers. Therefore, whenever we are loading a value
+to a char variable stored in a register, we need to make sure to mimic what lb
+does under the hood so that we can guarantee we are not breaking type
+conversion and overflow handling.
 
 To do that, after loading a value to a register (reg) reserved to hold the value
  of a char variable, I add the following extra code to perform sign extension:
@@ -154,8 +168,8 @@ I realized that the algorithm provided in the slides already handles coalescence
 for the case in which we use one live range per variable. This is because the
 LiveNow set is updated only after the edges had been created in a specific
 iteration. Therefore, when edges for an instruction of the type y = x are
-created, if that's the last occurrence of x, x will not be in the LiveNow set
-yet, which will prevent y and x to be connected in the graph, and therefore,
+created, if that is the last occurrence of x, x will not be in the LiveNow set
+yet, which will prevent y and x to be connected in the graph, and, therefore,
 they will be able to share a register.
 
 Whenever two variables coalesce, this might result in an instruction like
@@ -163,7 +177,7 @@ Whenever two variables coalesce, this might result in an instruction like
 move reg, reg
 
 because both variables can share the same register. This is a void instruction
-that do not generate in the final assembly code.
+that the compiler does not write to the final assembly code.
 
 --------------------------
 | ORDER OF OPTIMIZATIONS |
@@ -173,7 +187,7 @@ I process register allocation after local and global optimization. This is a
 different kind of optimization as it does not work by removing intermediary
 instructions but machine code. Eliminating intermediary instructions first, by
 the local and global optimization procedures, might reduce the number of
-registers actually needed, improving the overall performance of the compiler.
+registers needed, improving the overall performance of the compiler.
 
 --------------------------
 | IMPLEMENTATION DETAILS |
@@ -181,8 +195,8 @@ registers actually needed, improving the overall performance of the compiler.
 
 Not to increase too much the compilation overhead, I implemented the set of
 nodes to color and to spill as a max and min heap respectively. Therefore,
-getting a node with highest/lowest cost will be O(logn) instead of O(n) which is
- what would get if I worked with a linked list.
+getting a node with the highest/lowest cost will be O(logn) instead of O(n)
+which is what one would get if working with a linked list.
 
 ---------------
 | Experiments |
@@ -195,11 +209,9 @@ The programs used in this section are in the directory eval/a3.
 This program is the 4th program I experimented with in the previous assignment.
 It consists of a merge of 3 other programs that were individually coded to
 explore gains of specific types of local and global optimizations. I chose this
-program to start this section to check how much more improvement register
-allocation can bring to the final machine code.
-
-Below are the results of register allocation optimization compared to what I got
- previously.
+program to start this section to get an overview of the improvements brought by
+register allocation in comparison to the other kinds of optimization
+implemented.
 
 Before Optimization
 Stats -- #instructions : 318
@@ -213,79 +225,309 @@ After Optimization(register allocation only)
 Stats -- #instructions : 128
          #reads : 6  #writes 5  #branches 23  #other 94
 
+After Optimization(local + register allocation)
+Stats -- #instructions : 174
+         #reads : 6  #writes 5  #branches 22  #other 141
+
+After Optimization(global + register allocation)
+Stats -- #instructions : 124
+         #reads : 6  #writes 5  #branches 23  #other 90
+
 After Optimization(local + global + register allocation)
 Stats -- #instructions : 111
          #reads : 6  #writes 5  #branches 22  #other 78
 
 This is an incredible result. Register allocation by itself was able to
-cause a reduction of 95% write and load instructions compared to the
-unoptimized generated code, surpassing local + global optimization performance
-in terms of these memory intensive instructions. Compared to the code optimized
+cause a reduction of 95% in the number of write and load instructions compared
+to the unoptimized code, surpassing local + global optimization performance
+in terms of these memory-intensive instructions. Compared to the code optimized
 by local and global methods, it represents a reduction of 79% in write and load
 instructions.
 
-It's important to highlight, however, that register allocation increases the
-number of other instructions, which involves operations with registers. Local and
- global optimizations can help with this by eliminating unnecessary
- intermediary code, which, by consequence, reduces the number of instructions
- and, sometimes, the number of registers needed to be allocated. We see
- that the final optimized code (after the application of all 3 types of
- optimizations implemented) is more efficient than the original code in terms
-  of all kinds of instructions: write, load, branches and other.
+It is important to highlight, however, that register allocation increases the
+number of other instructions, which involves operations with registers. Local
+and global optimizations can help with this by eliminating unnecessary
+intermediary code, which, by consequence, reduces the number of instructions
+and, sometimes, the number of registers needed to be allocated. We see that the
+final optimized code (after the application of all 3 types of optimizations
+implemented) is more efficient than the original code in terms of all kinds of
+instructions: write, load, branches and other.
+
+Since register allocation ends up performing some sort of copy propagation among
+ registers and it was able to put all the variables into registers in this
+specific program (only 3 registers were needed), the number of reads and writes
+is minimized by using register allocation regardless of other optimizations.
+However, an interesting fact happened when local optimization and register
+allocation were used in conjunction: the number of other operations increased by
+ a lot.
+
+Looking at the generated code, I could see that local optimization propagated a
+ constant throughout the code, generating multiple instructions like
+
+ASSIGN a = constant(1)
+ASSIGN b = constant(1)
+ASSIGN c = constant(1)
+ASSIGN d = constant(1)
+ASSIGN e = constant(1)
+...
+
+When register allocation is performed in the instructions above, it will
+generate a series of immediate loads as in
+
+li $t2, 1
+li $t2, 1
+li $t2, 1
+li $t2, 1
+
+which explains why the number of other instructions increased.
+
+This, however, does not happen when register allocation is executed alone
+because a, b, c etc. coalesce in this program, which gives rise to the following
+ code
+
+li $t2, 1
+# move $t2, $t2 (removed by this compiler because it is a void operation)
+
+Of course, that issue could be easily solved by some sort of peephole
+optimization over the instructions generated after register allocation, but this
+ was left out of the scope of this compiler.
+
+Global optimization + register allocation reduces a bit the number of operations
+ with registers needed by eliminating unnecessary code. However, the best
+performance is achieved with the three kinds of optimizations. This is because
+introducing local optimization here reduces the need for temporary variables
+(peephole optimization gets rid of assigning to a temporary before assigning to
+a variable). The issue reported above with constant propagation is eliminated
+by the global optimization that will remove all of those instructions since the
+variables are all dead, and register allocation is able to put all the
+variables used into registers, reducing the number of memory operations to its
+minimum.
 
 - Program 2
 
-Another function 8 registers in a function and 8 registers in another function.
+In this experiment, I am interested in checking the optimization I implemented
+to reduce register clashes. This program has two functions (sum and main) that
+possess 8 variables each that are live at the same time (7 declared local
+variables and 1 temporary created by the compiler). I turned off local and
+global optimization to focus only on register allocation.
+
+Let's check the cases below:
+
+1. Register clash optimization is turned off.
+
+Here I assume the compiler has no information about the registers used in the
+function sum7. In this scenario, every time this function is called, the
+compiler needs to store the some allocated registers to memory before the
+ function call and restore them to the registers after the function return.
+
+Stats -- #instructions : 278
+         #reads : 44  #writes 43  #branches 21  #other 170
+
+This result serves as the baseline for the following discussion.
+
+2. The function sum7 is called BEFORE the variables in main are used and
+register clash optimization is turned on.
+
+In this case, the variables in main must be allocated to registers that were
+not used in function sum7 to maximize performance.
+
+Stats -- #instructions : 238
+         #reads : 23  #writes 22  #branches 21  #other 172
+
+Here we see a reduction of 21 load and write instructions. This is because the
+function sum7 is called 4 times. In all of these calls, we reduced the need
+to store and retrieve 7 registers (the temporary register does not need to be
+saved because it is not live at the function call). Which saves us 7*4 = 28
+instructions. On the other hand, now the variables of the main function had to
+be allocated in callee saved registers, therefore, instructions to store and
+retrieve these registers had to be introduced in the ENTER and LEAVE sections of
+ the main function, causing an increment of 7 more loads and writes. Leading us
+to the final 28 - 7 = 21 load and write instructions saved.
+
+3. The function sum7 is called AFTER the variables in main are used and
+   register clash optimization is turned on.
+
+In this scenario, the variables in both functions can be stored in the same
+registers as the live ranges of the variables in the caller do not intersect
+with the live ranges of the variables in the callee.
+
+Stats -- #instructions : 222
+         #reads : 16  #writes 15  #branches 21  #other 170
+
+As expected, we can see a reduction of more 7 instructions related to the
+callee-saved registers that are no longer used in main since the same set of $t
+registers can be used without any problem by both functions.
 
 - Program 3
 
-16 registers per function.
+This program tests the optimization I implemented to choose the next node to
+color more efficiently. There are enough registers to allocate the variables in
+either function alone. However, there are not enough registers to held the
+variables of both functions together. I will copy the code of the main function
+below to ease the following discussion
+
+1. void main(void)
+2. {
+3.   int a, b, c, d, e;
+4.   a = 1 + 0;
+5.   b = 2 + 0;
+6.   c = 3 + 0;
+7.   d = 4 + 0;
+8.   e = 5 + 0;
+9.   sum15();
+10.  println(a+b+c+d+e);
+11.  for(; c <= 6; c=c+1) {
+12.    sum15();
+13.  }
+14. }
+
+First, I included + 0 in the constant assignment instructions to avoid constant
+propagation, which would kill the variables 'a', 'b', 'd', and 'e' and I want
+them alive for this experiment. Also, I optimize locally and globally to remove
+temporary assignments and eliminate any unnecessary code so we can focus only on
+ register allocation.
+
+The function sum15 needs 15 registers. This will force 4 of the 5 variables in
+the main function to share registers with variables used by sum15. When sum15
+is called in line 9, the variables from 'a' to 'e' are still live, thus the
+registers where 4 of them are allocated will need to be stored in memory before
+the function call, and reloaded after it, because they will be overwritten by
+sum15.
+
+The call to sum15 in line 12, on the other hand, only needs to repeat this
+process of saving/restore registers if the register chosen for the variable c is
+ not the one that was unused in sum15. Note that since the live range of a - e
+variables intersect, the variable that will get to use the register unused in
+sum15 will be the first one chosen to be colored by the graph coloring algorithm
+. The code is mostly optimized for this situation if the variable 'c' is chosen
+to that register because such variable has a high cost.
+
+Let's see how the compiler works in this scenario.
+
+1. Allocate variables with no knowledge about the cost
+
+Stats -- #instructions : 577
+         #reads : 63  #writes 62  #branches 31  #other 421
+
+2. Allocate variables with high cost first
+
+Stats -- #instructions : 569
+         #reads : 59  #writes 58  #branches 31  #other 421
+
+The results match what we expected. 4 write/load instructions were saved as 'c'
+was chosen to be allocated to the spare register, therefore, eliminating the
+need for saving/restoring its register to memory at each one of the 4 calls to
+the function sum15 in line 12.
 
 - Program 4
 
-16 registers needed in a function and 4 registers needed in another function.
-Check if it allocates the costlier variables first.
+In this experiment, I want to check the effectiveness of choosing the right node
+ to spill in the graph when there are not enough registers to all of the
+variables used.
+
+To simplify the program, I reduced the number of available registers to 7. This
+program (eval/prog04.c) has 8 declared variables and 1 temporary (used by the
+compiler after local and global optimizations are performed) with intersecting
+live ranges. Therefore, the compiler would need 9 registers to be able to
+allocate all of them to registers. Since there are only 7 available, two
+variables will have to be persisted in memory throughout the program.
+
+Let's check the behavior of the compiler for some scenarios.
+
+1. The next variable to spill is the most costly one
+
+Stats -- #instructions : 3009
+         #reads : 414  #writes 213  #branches 428  #other 1954
+
+2. The next variable to spill is the cheapest one but the cost of a nested loop
+is kept the same as the one of a single loop
+
+Stats -- #instructions : 2591
+         #reads : 6  #writes 203  #branches 428  #other 1954
+
+3. The next variable to spill is the cheapest one (right implementation)
+
+Stats -- #instructions : 2391
+         #reads : 6  #writes 23  #branches 428  #other 1934
+
+The compiler in case 1 does the inverse of what we need. It allocates to memory
+variables that are most used in the program. Therefore, it shows poor
+performance.
+
+The compiler in case 2 spills variables that cost less. However, the cost of a
+variable in this scenario does not accumulate over nested scopes. It ends up
+assigning the same cost for variables that are inside either a single loop or
+a nested loop. In this case, the compiler decided to spill variables 'b' and 'c'
+which are clearly not the best options since 'b' is inside a double nested loop
+ and 'c' is inside a triple nested loop.
+
+The compiler in the final case behaves as expected as the cost of a variable is
+now better estimated. It correctly chooses the variables 'a' and 'e' to spill,
+which are the only ones inside a single loop scope. The reduction in the number
+of writes to memory is expressive.
+
+P.S. The number of loads between case 2 and case 3 does not change because the
+program contains instructions like b = i * j inside the loop. Since i and j are
+allocated into registers, the result of the binary operation will be stored in
+the memory location of 'b' (assuming 'b' was spilled). Therefore, no load
+instruction is executed for 'b'. In case 1, the number of loads is high because
+the variables chosen to be spilled were 'k' and a temporary, which appear most
+of the times in the RHS of the expressions, demanding, therefore, load
+instructions.
 
 - Program 5
 
-Check runtime
-
-
------------------------
-
-
-
-
-- Program 5
-
-The most costly of the three algorithms implemented is dead code elimination
-because it requires liveness analysis and the information is not constrained to
-a single block. This program consists of a series of dead instructions
-inside nested loops (therefore, multiple blocks) to allow us to compare how the
-optimization affects the running time of the compiler.
+This program evaluates the optimizations implemented in terms of execution time.
+ I used a slightly modified version of the prog05.c from the last assignment
+(not enough registers for all variables in the modified version) to check the
+runtime.
 
 Before Optimization
-Stats -- #instructions : 110571
-         #reads : 38902  #writes 36855  #branches 10238  #other 24576
+Stats -- #instructions : 172087
+         #reads : 59416  #writes 57352  #branches 10240  #other 45079
 
-Running time (10 independent executions): 0.21 +|- 0.035 ms
+Running time (100 independent executions): 0.31 +|- 0.039 ms
 
 After Optimization(local + global optimization)
-Stats -- #instructions : 47100
-         #reads : 10238  #writes 6143  #branches 8191  #other 22528
+Stats -- #instructions : 92232
+         #reads : 18464  #writes 18448  #branches 8193  #other 47127
 
-Running time (10 independent executions): 1 +|- 0.04 ms
+Running time (100 independent executions): 1.2 +|- 0.16 ms
 
-Local and global optimizations were able to reduce by a large amount the number
-of instructions in this sample program. 76% reduction in read, 83% in write and
-20% branch instructions. All of this, however, at a cost of taking almost 5x
-more milliseconds to generate the final assembly code.
+After Optimization(register allocation)
+Stats -- #instructions : 77871
+         #reads : 4110  #writes 4107  #branches 10240  #other 59414
+
+Running time (100 independent executions): 1.3 +|- 0.17 ms
+
+After Optimization(local + global + register allocation)
+Stats -- #instructions : 59442
+         #reads : 2061  #writes 2059  #branches 8193  #other 47129
+
+Running time (100 independent executions): 1.6 +|- 0.21 ms
 
 
+Local and global optimization again show similar results to the ones reported
+in the last assignment. Here we observe a reduction of about 68% in number of
+writes/loads against an increase of 4x more milliseconds to generate the
+assembly code.
 
+Register allocation alone is responsible for an impressive reduction in the
+number of writes/loads. 93% reduction in the number of these memory-intensive
+instructions, at about the same compiling runtime cost of the local and global
+optimization. This process, however, is not able to optimize the number of
+branch instructions as the others can.
 
+For register allocation, most of the cost is in the manipulation of the
+interference graph since liveness analysis is only performed once (it can
+ be executed multiple times in dead code elimination). However, the  control
+flow is also a graph, so abstracting differences in the implementation of dead
+code elimination and register allocation, what we have in the end is a series of
+ manipulations across the nodes of two distinct graphs (a graph of basic blocks
+and a graph of live range nodes). If the structure of these graphs do not
+differ too much from one another, we should expect to see a similar runtime
+behavior.
 
-
-
-
-
+Finally, applying all the optimizations to the compiler, we are left with an
+outstanding reduction of 96% of loads/writes, 20% in the number of branch
+instructions at the cost of having a compiler 5x slower.

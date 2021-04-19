@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
 
   if (timer) {
     // Execute multiple times and save running time
-    num_execs = 10;
+    num_execs = 100;
     if (optimized) {
       file_timer = fopen("../test/timer_opt.txt", "w");
     } else {
