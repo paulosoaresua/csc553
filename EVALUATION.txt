@@ -8,8 +8,8 @@ This implementation does not allocate global variables, array locations, or
 function parameters to registers. Moreover, I use a single live range per
 variable.
 
-Coalescence is performed, but I figured it is already covered by the given
-algorithm. At least for the single-live-range-per-variable scenario.
+Coalescence is performed but I figured it is already covered by the given
+algorithm for the single-live-range-per-variable scenario as I will show later.
 
 I implemented some sort of interference detection between functions. Whenever a
 function is called after its implementation, it is possible for the compiler to
@@ -26,39 +26,39 @@ Registers $t0 and $t1 were reserved for intermediary operations only.
 
 3. Caller/callee register saving procedure
 
-Registers from $t2 to $t10 are saved and restored by the caller before and
+Registers from $t2 to $t9 are saved and restored by the caller before and
 right after a function call. On the other hand, registers from $s0 to $s7 are
 written to memory and restored by the callee in its ENTER and LEAVE sections
 respectively.
 
-When I first executed this optimization, the aforementioned procedure actually
-increased the number of writes and reads from memory because of the
+When I first executed this optimization, the aforementioned procedure in the
+caller side increased the number of writes and reads from memory because of the
 indiscriminate savings and loadings to and from memory at every function call.
-To reduce the number of write and load instructions, I keep a set of registers
-used in a function and the caller only saves and restores registers before/after
- a function call if the two following conditions hold:
-
-1. The variables for which the registers are holding values are live after the
-function call;
-2. The registers are used by the callee.
+To reduce the number of write and load instructions, I keep track of the set
+of registers used in each function. So the caller only needs to save and restore
+ registers before/after a function call if they are used by the function being
+ called and they belong to variables that are live in the caller after the
+ function call. This last condition prevents us from saving/restoring registers
+ which values will not be used anymore in the caller after the function call.
 
 If a function being called has not been parsed yet (function definition delayed)
-, I make no assumptions and I save all the registers reserved for variables
-live after the function call before invoking the callee. In most cases, function
- definitions will be given before they are called by another function.
-Therefore, this issue should not happen often.
+, the compiler assumes all available registers are used by that function. In
+most cases, however, function definitions will be given before they are called
+by another function.
 
 Also, I made sure that the set of registers used by a function is updated in
-such a way that in the end it also includes any registers used by other
-functions invoked within the former function's scope.
+such a way that it also includes any registers used by other functions invoked
+within the former function's scope. In other words, the set of registers used by
+ a function is filled recursively to make sure no used register is left behind.
 
 Finally, since the println function was hardcoded and no $t register is used in
 it, I manually defined the set of registers used in that function to empty.
 
 3. Choosing registers to allocate
 
-I made a slight modification to the original algorithms to reduce clashes in the
- choice of registers. Before I describe them, consider the following definitions
+I made some small modifications to the original algorithms to improve the
+distribution of live ranges across registers. Before I describe the changes I
+made, consider the following definitions
 
 - Node: A variable's live range (sometimes I will abuse this definition by using
  node and variable interchangeably. Hopefully, it will be clear from the
@@ -74,17 +74,22 @@ a. Constructing the interference graph
 2. Proceed with the original algorithm.
 3. Whenever a CALL instruction is processed, for every variable in LiveNow set
 at that point, remove the registers used in the function being called from
-these variables' PrefSet.
+these variables' PrefSet. Also, add these registers to the caller's set of
+used registers.
 
 In the end, the PrefSet for each node will contain registers that are not used
 by functions called when the node's variable is live. If we can allocate
 some nodes to one of the registers in their PrefSet, this will reduce the number
  of caller saves/loads needed at function calls. This is the inter-function
 interference detection I briefly commented in the beginning of this document.
-It works as a soft constraint on the registers a variable can be allocated to.
-Therefore, as it will be clear next, even if this PrefSet for a node is not
-empty, it is not guaranteed that we will be able to use a register from it for
-that node.
+It works as a soft constraint on the registers a variable can be allocated to as
+ even if this PrefSet for a node is not empty, it is not guaranteed that the
+ compiler will be able to use a register from it for that node. This will be
+ clear when I explain the next algorithm.
+
+NOTE: By the time a CALL instruction is detected, if the callee has not been
+parsed yet, the set of registers used by it is given by the set of all
+available registers.
 
 b. Coloring the graph
 
@@ -102,37 +107,43 @@ registers.
 9.   END
 10.  assign any register from AvailableSet to the node
 11.  add the chosen register to the AvoidSet of every neighbor of the node
-12.  UNTIL
-13.  ... // Equals to the original algorithm
+12.  add the chosen register to the caller's set of used registers
+13.  UNTIL
+14.  ... // Equals to the original algorithm
 
 Let's go over the modifications introduced to understand the intuition behind
 them.
 
 In line 3, instead of picking an arbitrary node with fewer than K neighbors
-from the graph, I choose the one with the highest cost to increase the
-likelihood of being able to allocate high-cost variables to one of the registers
- in their PrefSet. Notice that as I color the graph, I include elements to some
- nodes' AvoidSet. If we delay the evaluation of a node, we might end up with a
- situation where all the registers in its PrefSet are also in its AvoidSet (line
- 6), forcing us to pick a register that will be stored/retrieved from memory by
- the caller at some point. Processing the nodes with higher cost first will
- reduce the number of times this situation happens with high-cost variables.
+from the graph, the compiler chooses the one with the highest cost to increase
+the likelihood of being able to allocate high-cost variables to one of the
+registers in their PrefSet. Notice that as the compiler colors the graph, it
+includes registers to some nodes' AvoidSet. If the compiler delays the
+evaluation of a node, it might end up with a situation where all the registers
+in that node's PrefSet are also in its AvoidSet (line 6), forcing the compiler
+to pick a register that will be stored/retrieved from memory by the caller at
+some function call. Processing the nodes with higher cost first will reduce the
+number of times this situation happens with high-cost variables.
 
 Finally, line 11 is necessary so we do not end up allocating the same register
-for two neighbor live ranges.
+for two neighbor live ranges, and line 12 updates the set of registers used by
+the caller.
 
 At the end of this algorithm, the variables will already be informed about the
-registers they must use in the generated assembly code.
+registers they must use in the generated assembly code, and the parsed function
+will be filled with the set of registers used in. The latter will be used by the
+ caller and the callee to decide whether or not to save/restore registers
+to/from memory.
 
 A final note is that the allocation process gives preference to registers $t
 inside AvailableSet. Registers of type $s are only used if there is no other $t
 available. This reduces the number of write/load instructions in the callee
-register saving procedure.
+register-saving procedure.
 
 4. Cost of a variable
 
-I compute the cost of a variable during my code generation phase. Therefore,
-over the AST. I used the following atomic instruction costs:
+The compiler calculates the cost of a variable during the code generation phase.
+Therefore, over the AST. I used the following atomic instruction costs:
 
 - Cost at the AST root: 1
 - Cost in a single instruction: 1
@@ -143,7 +154,7 @@ over the AST. I used the following atomic instruction costs:
 
 The cost is processed recursively, thus variables in a nested scope will
 accumulate the cost of the outer scope multiplied by the incurring cost of the
-instructions they are in the inner scope.
+instructions they appear in the inner scope.
 
 5. Type conversion
 
@@ -153,11 +164,12 @@ perform register allocation, on the other hand, there is no instruction to load
 a char immediately or to move just the least significant byte with signal
 preservation between registers. Therefore, whenever we are loading a value
 to a char variable stored in a register, we need to make sure to mimic what lb
-does under the hood so that we can guarantee we are not breaking type
+does under the hood so that we can guarantee that we are not breaking type
 conversion and overflow handling.
 
 To do that, after loading a value to a register (reg) reserved to hold the value
- of a char variable, I add the following extra code to perform sign extension:
+ of a char variable, the compiler adds the following extra code to perform sign
+extension:
 
 sll reg, reg, 24
 sra reg, reg, 24
@@ -177,7 +189,9 @@ Whenever two variables coalesce, this might result in an instruction like
 move reg, reg
 
 because both variables can share the same register. This is a void instruction
-that the compiler does not write to the final assembly code.
+that the compiler does not write to the final assembly code. Notice that this
+can be interpreted as a copy propagation + dead code elimination kind of
+situation.
 
 --------------------------
 | ORDER OF OPTIMIZATIONS |
@@ -282,11 +296,11 @@ li $t2, 1
 which explains why the number of other instructions increased.
 
 This, however, does not happen when register allocation is executed alone
-because a, b, c etc. coalesce in this program, which gives rise to the following
- code
+because a, b, c etc. share the same register and they coalesce in this program,
+which gives rise to the following code
 
 li $t2, 1
-# move $t2, $t2 (removed by this compiler because it is a void operation)
+# move $t2, $t2 (removed by the compiler because it is a void operation)
 
 Of course, that issue could be easily solved by some sort of peephole
 optimization over the instructions generated after register allocation, but this
@@ -306,18 +320,18 @@ minimum.
 - Program 2
 
 In this experiment, I am interested in checking the optimization I implemented
-to reduce register clashes. This program has two functions (sum and main) that
+to improve register choice. This program has two functions (sum7 and main) that
 possess 8 variables each that are live at the same time (7 declared local
 variables and 1 temporary created by the compiler). I turned off local and
 global optimization to focus only on register allocation.
 
 Let's check the cases below:
 
-1. Register clash optimization is turned off.
+1. Register choice optimization is turned off.
 
 Here I assume the compiler has no information about the registers used in the
 function sum7. In this scenario, every time this function is called, the
-compiler needs to store the some allocated registers to memory before the
+compiler needs to store some of the allocated registers to memory before the
  function call and restore them to the registers after the function return.
 
 Stats -- #instructions : 278
@@ -326,7 +340,7 @@ Stats -- #instructions : 278
 This result serves as the baseline for the following discussion.
 
 2. The function sum7 is called BEFORE the variables in main are used and
-register clash optimization is turned on.
+register choice optimization is turned on.
 
 In this case, the variables in main must be allocated to registers that were
 not used in function sum7 to maximize performance.
@@ -345,7 +359,7 @@ retrieve these registers had to be introduced in the ENTER and LEAVE sections of
 to the final 28 - 7 = 21 load and write instructions saved.
 
 3. The function sum7 is called AFTER the variables in main are used and
-   register clash optimization is turned on.
+   register choice optimization is turned on.
 
 In this scenario, the variables in both functions can be stored in the same
 registers as the live ranges of the variables in the caller do not intersect
@@ -381,11 +395,14 @@ below to ease the following discussion
 13.  }
 14. }
 
-First, I included + 0 in the constant assignment instructions to avoid constant
-propagation, which would kill the variables 'a', 'b', 'd', and 'e' and I want
-them alive for this experiment. Also, I optimize locally and globally to remove
-temporary assignments and eliminate any unnecessary code so we can focus only on
- register allocation.
+All optimizations were turned on to remove temporary assignments and eliminate
+any unnecessary code.
+
+First, I included + 0 in the constant assignment instructions to avoid copy
+propagation to the println function, which would kill the variables 'a', 'b',
+'d', and 'e' and I want them alive for this experiment (the compiler does not
+implement constant propagation so this workaround will prevent copy propagation)
+.
 
 The function sum15 needs 15 registers. This will force 4 of the 5 variables in
 the main function to share registers with variables used by sum15. When sum15
@@ -422,7 +439,7 @@ the function sum15 in line 12.
 - Program 4
 
 In this experiment, I want to check the effectiveness of choosing the right node
- to spill in the graph when there are not enough registers to all of the
+ to spill in the graph when there are not enough registers for all of the
 variables used.
 
 To simplify the program, I reduced the number of available registers to 7. This
@@ -445,7 +462,8 @@ is kept the same as the one of a single loop
 Stats -- #instructions : 2591
          #reads : 6  #writes 203  #branches 428  #other 1954
 
-3. The next variable to spill is the cheapest one (right implementation)
+3. The next variable to spill is the cheapest one and cost is cumulative across
+nested scopes (right implementation)
 
 Stats -- #instructions : 2391
          #reads : 6  #writes 23  #branches 428  #other 1934
@@ -520,7 +538,7 @@ branch instructions as the others can.
 
 For register allocation, most of the cost is in the manipulation of the
 interference graph since liveness analysis is only performed once (it can
- be executed multiple times in dead code elimination). However, the  control
+ be executed multiple times in dead code elimination). However, the control
 flow is also a graph, so abstracting differences in the implementation of dead
 code elimination and register allocation, what we have in the end is a series of
  manipulations across the nodes of two distinct graphs (a graph of basic blocks
