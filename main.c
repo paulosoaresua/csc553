@@ -22,6 +22,9 @@ int main(int argc, char *argv[]) {
     } else if (strcmp("-Oglobal", argv[i]) == 0) {
       enable_global_optimization();
       optimized = true;
+    } else if (strcmp("-Oregalloc", argv[i]) == 0) {
+      enable_register_allocation_optimization();
+      optimized = true;
     } else if (strcmp("-Odev", argv[i]) == 0) {
       dev = true;
     } else if (strcmp("-Otimer", argv[i]) == 0) {
@@ -35,9 +38,9 @@ int main(int argc, char *argv[]) {
   double cpu_time_used;
   int num_execs = 1;
 
-  if(timer) {
+  if (timer) {
     // Execute multiple times and save running time
-    num_execs = 10;
+    num_execs = 100;
     if (optimized) {
       file_timer = fopen("../test/timer_opt.txt", "w");
     } else {
@@ -45,7 +48,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  for(int i = 0; i < num_execs; i++) {
+  for (int i = 0; i < num_execs; i++) {
     SymTabInit(Global);
     SymTabInit(Local);
 
@@ -61,7 +64,7 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    if(timer) {
+    if (timer) {
       start = clock();
     }
 

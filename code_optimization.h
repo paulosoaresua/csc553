@@ -19,17 +19,33 @@ void enable_local_optimization();
 void enable_global_optimization();
 
 /**
+ * Enables register allocation optimization.
+ */
+void enable_register_allocation_optimization();
+
+/**
  * Print blocks and instructions.
  *
  * @param file: file where the instructions must be printed
  */
-void print_blocks_and_instructions(FILE* file);
+void print_blocks_and_instructions(FILE *file);
 
 /**
  * Optimize code.
  *
- * @param function_body: first syntax-tree node of the current parsed function body.
+ * @param function_header: function entry in the symbol table
+ * @param function_body: first syntax-tree node of the current parsed function
+ * body.
  */
-void optimize_instructions(tnode* function_body);
+void optimize_instructions(symtabnode *function_header, tnode *function_body);
+
+/**
+ * Retrieve a pointer to a variable by its id.
+ *
+ * @param id: id
+ *
+ * @return Pointer to symbol table entry
+ */
+symtabnode *get_variable_by_id(int id);
 
 #endif // CSC553_CODE_OPTIMIZATION_H

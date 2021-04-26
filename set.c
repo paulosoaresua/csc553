@@ -25,8 +25,15 @@ set create_empty_set(int max_size) {
 
 set create_full_set(int max_size) {
   set set = create_empty_set(max_size);
-  for (int i = 0; i < set.num_partitions; i++) {
+  for (int i = 0; i < set.num_partitions - 1; i++) {
     set.mask[i] = ~0;
+  }
+  // In the last partition
+  int r = max_size % BITS_PER_PARTITION;
+  for (int i = 0; i < r; i++) {
+    // Left shift with trailling 1
+    set.mask[set.num_partitions - 1] <<= 1;
+    set.mask[set.num_partitions - 1] |= 1;
   }
 
   return set;
@@ -106,6 +113,8 @@ bool is_set_empty(set set) {
 }
 
 bool does_elto_belong_to_set(int elto, set set) {
+  if (is_set_undefined(set)) return false;
+
   int partition = elto / BITS_PER_PARTITION;
   int pos_in_partition = elto % BITS_PER_PARTITION;
   int elto_mask = (1 << pos_in_partition);

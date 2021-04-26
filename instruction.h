@@ -24,6 +24,7 @@ typedef enum OpType {
   OP_Goto,
   OP_Index_Array,
   OP_Deref,
+  OP_Leave,
 } OPType;
 
 typedef enum InstructionType {
@@ -62,6 +63,7 @@ typedef struct Instruction {
   // variable
   bnode *block;
   bool dead;
+  set live_at_call; // Set of live variables at the call instruction
 
 } inode;
 

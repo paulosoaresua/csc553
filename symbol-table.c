@@ -55,6 +55,17 @@ void SymTabInit(int sc) {
   int i;
 
   for (i = 0; i < HASHTBLSZ; i++) {
+    /// Free memory allocated to variables, list of variables and graph nodes.
+    symtabnode* var = SymTab[sc][i];
+    while(var) {
+      symtabnode* next = var->next;
+      free(var->live_range_node);
+      free(var->copied_to);
+      var->live_range_node = NULL;
+      var->copied_to = NULL;
+      var->entered = false;
+      var = next;
+    }
     SymTab[sc][i] = NULL;
   }
 }
@@ -132,6 +143,8 @@ symtabnode *SymTabInsert(char *str, int sc) {
   sptr->name = malloc(strlen(str) * sizeof(char));
   sptr->name = strcpy(sptr->name, str);
   sptr->scope = sc;
+  sptr->live_range_node = NULL;
+  sptr->cost = 0;
 
   sptr->next = SymTab[sc][hval];
   SymTab[sc][hval] = sptr;

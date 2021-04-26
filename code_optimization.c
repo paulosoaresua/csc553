@@ -4,13 +4,22 @@
  */
 
 #include "code_optimization.h"
+#include "heap.h"
 #include "liveness_analysis.h"
 
-bool local_enabled = false;
-bool global_enabled = false;
+static bool local_enabled = false;
+static bool global_enabled = false;
+static bool register_allocation_enabled = false;
 FILE *file_3addr;
 
+static int NUM_REGISTERS = 16; // $t2 - $t9 + $s0 - $s7. The first 2 $ts are
+                               // reserved for temporary operations and arrays.
+
 static var_list_node *propagated_vars;
+
+// Fast access of a variable via its id.
+// It's filled when the interference graph is created.
+static symtabnode **local_variables;
 
 static void optimize_locally(inode *instruction_head);
 static void run_peephole_optimization(inode *instruction_head);
@@ -23,15 +32,23 @@ static void clear_propagated_vars();
 static void attach_variable_to_original(symtabnode *var, symtabnode *original);
 static void detach_variable_from_original(symtabnode *var);
 static void detach_copies_from_original(symtabnode *original);
+static void optimize_register_allocation(symtabnode *function_header);
+static gnode_list_item *create_interference_graph(symtabnode *function_header);
+static void create_interference_graph_connections(symtabnode *function_header);
+static void color_graph(gnode_list_item *graph, symtabnode *function_header);
 
 void enable_local_optimization() { local_enabled = true; }
 
 void enable_global_optimization() { global_enabled = true; }
 
+void enable_register_allocation_optimization() {
+  register_allocation_enabled = true;
+}
+
 void print_blocks_and_instructions(FILE *file) { file_3addr = file; }
 
-void optimize_instructions(tnode *function_body) {
-  if (local_enabled || global_enabled) {
+void optimize_instructions(symtabnode *function_header, tnode *function_body) {
+  if (local_enabled || global_enabled || register_allocation_enabled) {
     fill_backward_connections(function_body->code_head);
     build_control_flow_graph(function_body->code_head);
     if (file_3addr) {
@@ -41,6 +58,7 @@ void optimize_instructions(tnode *function_body) {
     }
     optimize_locally(function_body->code_head);
     optimize_globally();
+    optimize_register_allocation(function_header);
     if (file_3addr) {
       fprintf(file_3addr, "\nAfter Optimization\n");
       print_3addr_instructions(function_body->code_head);
@@ -235,7 +253,7 @@ void do_dead_code_elimination() {
 
 bool remove_dead_instructions() {
   blist_node *block_list_node = get_all_blocks();
-  int n = get_total_assignment_instructions();
+  int n = get_total_local_variables();
   bool dead_instructions_found = false;
 
   while (block_list_node) {
@@ -304,7 +322,7 @@ bool remove_dead_instructions() {
   return dead_instructions_found;
 }
 
-static void print_3addr_instructions(inode *instruction_head) {
+void print_3addr_instructions(inode *instruction_head) {
   inode *curr_instruction = instruction_head;
   bnode *curr_block;
   while (curr_instruction) {
@@ -327,5 +345,302 @@ static void print_3addr_instructions(inode *instruction_head) {
     }
     fprintf(file_3addr, "\n");
     curr_instruction = curr_instruction->next;
+  }
+}
+
+void optimize_register_allocation(symtabnode *function_header) {
+  if (register_allocation_enabled && get_total_local_variables() > 0) {
+    gnode_list_item *graph = create_interference_graph(function_header);
+    find_in_and_out_liveness_sets(get_all_blocks());
+    create_interference_graph_connections(function_header);
+    if (file_3addr) {
+      fprintf(file_3addr, "\nInterference Graph:\n\n");
+      fprintf(file_3addr, "\nAdjacency List:\n");
+      print_graph(graph, file_3addr);
+    }
+    color_graph(graph, function_header);
+    if (file_3addr) {
+      fprintf(file_3addr, "\nVariable IDs:\n");
+      for (int i = 0; i < get_total_local_variables(); i++) {
+        if(local_variables[i]->live_range_node) {
+          fprintf(file_3addr, "%s: [id: %d] [cost: %d] [reg: %d]\n",
+                  local_variables[i]->name, (int)local_variables[i]->id,
+                  local_variables[i]->cost, local_variables[i]->live_range_node->reg);
+        }else {
+          fprintf(file_3addr, "%s: [id: %d] [cost: %d] \n",
+                  local_variables[i]->name, (int)local_variables[i]->id,
+                  local_variables[i]->cost);
+        }
+      }
+    }
+  }
+}
+
+gnode_list_item *create_interference_graph(symtabnode *function_header) {
+  gnode_list_item *graph = NULL;
+  symtabnode **entries = get_symbol_table_entries(Local);
+  int table_size = get_symbol_table_size();
+  int n = get_total_local_variables();
+
+  function_header->entered = true;
+  function_header->registers_used = create_empty_set(NUM_REGISTERS);
+
+  local_variables = zalloc(n * sizeof(symtabnode *));
+
+  for (int i = 0; i < table_size; i++) {
+    symtabnode *var = entries[i];
+    while (var) {
+      if (var->type != t_Array && var->type != t_Addr && !var->formal) {
+        // This optimization is not carried out for arrays
+        var->live_range_node = create_graph_node(var->id, n - 1);
+        var->live_range_node->cost = var->cost;
+        var->live_range_node->regs_to_avoid = create_empty_set(NUM_REGISTERS);
+        var->live_range_node->preferential_regs =
+            create_full_set(NUM_REGISTERS);
+        graph = add_node_to_graph(var->live_range_node, graph);
+      }
+      if (!var->formal) {
+        local_variables[var->id] = var;
+      }
+      var = var->next;
+    }
+  }
+
+  return graph;
+}
+
+void create_interference_graph_connections(symtabnode *function_header) {
+  blist_node *block_list_node = get_all_blocks();
+  int n = get_total_local_variables();
+
+  while (block_list_node) {
+    set live_now = clone_set(block_list_node->block->out);
+
+    inode *curr_instruction = block_list_node->block->last_instruction;
+    while (curr_instruction &&
+           curr_instruction->block == block_list_node->block) {
+      if (curr_instruction->dead) {
+        curr_instruction = curr_instruction->previous;
+        continue;
+      }
+
+      set lhs_set = create_empty_set(n);
+      set rhs_set = create_empty_set(n);
+
+      if (curr_instruction->dest && curr_instruction->dest->scope == Local) {
+        if (curr_instruction->dest->type != t_Addr) {
+          // This optimization is not carried out for arrays
+          add_to_set(curr_instruction->dest->id, lhs_set);
+        }
+      }
+
+      if (is_rhs_variable(curr_instruction)) {
+        if (SRC1(curr_instruction) && SRC1(curr_instruction)->scope == Local &&
+            !SRC1(curr_instruction)->is_constant &&
+            SRC1(curr_instruction)->type != t_Addr) {
+          add_to_set(SRC1(curr_instruction)->id, rhs_set);
+        }
+
+        if (SRC2(curr_instruction) && SRC2(curr_instruction)->scope == Local &&
+            !SRC2(curr_instruction)->is_constant &&
+            SRC2(curr_instruction)->type != t_Addr) {
+          add_to_set(SRC2(curr_instruction)->id, rhs_set);
+        }
+      }
+
+      if (curr_instruction->op_type == OP_Call &&
+          strcmp(SRC1(curr_instruction)->name, "println") == 0) {
+        // Println is hardcoded, therefore we know that it does not use any os
+        // the reserved registers we use here.
+        symtabnode *println_function = SRC1(curr_instruction);
+        if (!println_function->entered) {
+          println_function->entered = true;
+          println_function->registers_used = create_empty_set(NUM_REGISTERS);
+        }
+      }
+
+      bool is_call_to_pre_parsed_function =
+          curr_instruction->op_type == OP_Call &&
+          SRC1(curr_instruction)->entered;
+      if ((!is_set_empty(lhs_set) || is_call_to_pre_parsed_function) &&
+          !is_set_empty(live_now)) {
+
+        if (is_call_to_pre_parsed_function) {
+          // The registers used in the current function must also account for
+          // the registers used in the functions called by it
+          function_header->registers_used =
+              unify_sets(function_header->registers_used,
+                         SRC1(curr_instruction)->registers_used);
+        }
+
+        // Link the live_range node of the variable being assigned to to
+        // all the variables in the current live set.
+        set tmp_set = clone_set(live_now);
+        for (int i = 0; i < n; i++) {
+          if (does_elto_belong_to_set(i, tmp_set)) {
+            symtabnode *var = get_variable_by_id(i);
+
+            if (var->live_range_node) {
+              if (is_call_to_pre_parsed_function) {
+                // Remove from the preferential registers set of a variable,
+                // the registers used inside the function being called.
+                var->live_range_node->preferential_regs =
+                    diff_sets(var->live_range_node->preferential_regs,
+                              SRC1(curr_instruction)->registers_used);
+              } else {
+                if (curr_instruction->dest != var &&
+                    curr_instruction->dest->live_range_node) {
+                  // No self-loops or multiple edges between the same nodes
+                  add_edge(curr_instruction->dest->live_range_node,
+                           var->live_range_node);
+                }
+              }
+            }
+            remove_from_set(i, tmp_set);
+          }
+
+          if (is_set_empty(tmp_set))
+            break;
+        }
+      }
+
+      if (curr_instruction->op_type == OP_Call) {
+        // Here we store in the call instruction the set of variables live after
+        // the function call. We will use this information to know which
+        // registers need to be saved and loaded back by the caller before and
+        // after this function call.
+        curr_instruction->live_at_call = clone_set(live_now);
+      }
+
+      live_now = diff_sets(live_now, lhs_set);
+      live_now = unify_sets(live_now, rhs_set);
+
+      curr_instruction = curr_instruction->previous;
+    }
+
+    block_list_node = block_list_node->next;
+  }
+}
+
+symtabnode *get_variable_by_id(int id) { return local_variables[id]; }
+
+void color_graph(gnode_list_item *graph, symtabnode *function_header) {
+  if (NUM_REGISTERS <= 0) {
+    return;
+  }
+
+  function_header->registers_used = create_empty_set(NUM_REGISTERS);
+
+  // Construct max heap to find variable to spill more efficiently;
+  // We choose nodes to spill based on the lowest cost and nodes to color
+  // based on the highest cost so that these nodes have a higher change of
+  // getting a register in their preferential list.
+  set nodes_to_spill = create_empty_set(get_total_local_variables());
+  heap *nodes_to_spill_heap =
+      create_empty_heap(get_total_local_variables(), true);
+  heap *nodes_to_color_heap =
+      create_empty_heap(get_total_local_variables(), false);
+  // Store list of nodes in the graph in an array for fast recovery below
+  gnode_list_item *graph_nodes[get_total_local_variables()];
+  gnode_list_item *list_item = graph;
+  while (list_item) {
+    if (list_item->node->num_neighbors < NUM_REGISTERS) {
+      add_to_heap(list_item->node, nodes_to_color_heap);
+    } else {
+      add_to_heap(list_item->node, nodes_to_spill_heap);
+      add_to_set(list_item->node->id, nodes_to_spill);
+    }
+    graph_nodes[list_item->node->id] = list_item;
+    list_item = list_item->next;
+  }
+  build_heap(nodes_to_color_heap);
+  build_heap(nodes_to_spill_heap);
+
+  while (graph) {
+    while (nodes_to_color_heap->size > 0) {
+      // Choose node with highest cost
+      gnode *node_to_color = extract_heap_root(nodes_to_color_heap);
+      // Uncomment code below to choose the next node to color with no
+      // assumptions about the cost of a variable
+      // gnode_list_item* node = graph;
+      // while(node && node->node->num_neighbors >= NUM_REGISTERS) {
+      //   node = node->next;
+      // }
+      // node_to_color = node->node;
+      // Ends here
+
+      // Choose register to node
+      set available_regs = create_full_set(NUM_REGISTERS);
+      available_regs = diff_sets(available_regs, node_to_color->regs_to_avoid);
+      if (!is_set_empty(node_to_color->preferential_regs)) {
+        // Choose among a preferential set
+        set tmp =
+            intersect_sets(available_regs, node_to_color->preferential_regs);
+        if (!is_set_empty(tmp)) {
+          // Only if the intersection is not empty, we can to choose a
+          // register in the preferential list
+          available_regs = tmp;
+        }
+      }
+      for (int reg = 0; reg < NUM_REGISTERS; reg++) {
+        if (does_elto_belong_to_set(reg, available_regs)) {
+          node_to_color->reg = reg;
+          break;
+        }
+      }
+
+      // Add used register to the function being processed
+      add_to_set(node_to_color->reg, function_header->registers_used);
+
+      // Add more nodes to be colored and avoid using the same register in the
+      // neighbors of the current node.
+      gnode_list_item *neighbor = node_to_color->neighbors;
+      while (neighbor) {
+        add_to_set(node_to_color->reg, neighbor->node->regs_to_avoid);
+
+        if (neighbor->node->num_neighbors == NUM_REGISTERS) {
+          remove_from_set(neighbor->node->id, nodes_to_spill);
+          add_to_heap(graph_nodes[neighbor->node->id]->node,
+                      nodes_to_color_heap);
+        }
+        neighbor = neighbor->next;
+      }
+
+      graph = remove_node_from_graph(graph_nodes[node_to_color->id], graph);
+      build_heap(nodes_to_color_heap);
+    }
+
+    gnode *node_to_spill = extract_heap_root(nodes_to_spill_heap);
+    while (node_to_spill &&
+           !does_elto_belong_to_set(node_to_spill->id, nodes_to_spill)) {
+      // Nodes can have been removed from the spill set as others were colored.
+      node_to_spill = extract_heap_root(nodes_to_spill_heap);
+    }
+
+    // Uncomment code below to choose the next node to spill with no
+    // assumptions about the cost of a variable
+//    gnode_list_item* node = graph;
+//    while(node && node->node->num_neighbors < NUM_REGISTERS) {
+//      node = node->next;
+//    }
+//    if (node) {
+//      node_to_spill = node->node;
+//    } else {
+//      node_to_spill = NULL;
+//    }
+    // Ends here
+
+    if (node_to_spill) {
+      // As we spill a node, other might be eligible to be colored.
+      gnode_list_item *neighbor = node_to_spill->neighbors;
+      while (neighbor) {
+        if (neighbor->node->num_neighbors == NUM_REGISTERS) {
+          add_to_heap(neighbor->node, nodes_to_color_heap);
+        }
+        neighbor = neighbor->next;
+      }
+
+      graph = remove_node_from_graph(graph_nodes[node_to_spill->id], graph);
+    }
   }
 }

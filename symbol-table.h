@@ -8,6 +8,7 @@
 #define _SYMBOL_TABLE_H_
 
 #include "set.h"
+#include "graph.h"
 
 #define Global 0
 #define Local  1
@@ -35,6 +36,8 @@ typedef struct stblnode {
   int const_val;           // Variable with a constant value
   bool is_temporary;
   bool is_constant;
+  gnode *live_range_node;  // Node in the interference graph representing the
+                           // variable's live range
   struct stblnode *next_free; // List of free temporaries
   struct stblnode *next;
 
@@ -45,6 +48,10 @@ typedef struct stblnode {
   // used if the instruction is an assignment like one).
   struct stblnode* copied_from; // Stored during copy propagation
   var_list_node* copied_to; // List of variables
+  int cost; // Sum of frequencies of usage
+
+  set registers_used; // Store registers used in a function entry
+  bool entered; // Indicates whether the body of the function has been processed
 } symtabnode;
 
 /*********************************************************************
@@ -182,5 +189,20 @@ var_list_node*remove_from_list_of_variables(symtabnode* var, var_list_node* list
  * @param list_head: head of a list of variables
  */
 void clear_list_of_variables(var_list_node* list_head);
+
+/**
+ * Get symbol table entried in a given scope.
+ *
+ * @param scope: scope
+ * @return Scoped entries.
+ */
+symtabnode **get_symbol_table_entries(int scope);
+
+/**
+ * Get the maximum size of the symbol table.
+ *
+ * @return Size
+ */
+int get_symbol_table_size();
 
 #endif /* _SYMBOL_TABLE_H_ */
